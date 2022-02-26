@@ -5,3 +5,11 @@ pandas
 matplotlib
 tqdm
 scikit-learn
+torch
+tensorboard
+transformers
+scikit-image
+opencv-python
+timm
+scipy
+colorednoise
