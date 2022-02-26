@@ -31,12 +31,20 @@ CONFIG = {
     "n_accumulate": 1,
     "n_workers": 4,
     "model_save_name": "baseline",
-    "pretrained_model": "resnet34",
-    "lr": 3e-4,
+    "model_name": "resnet34",  # <---- just for you Eduardo
+    "lr": 2e-4,
+    "backbone_lr": 1e-4,
     "weight_decay": 0,
     "warmup": 0,
     "sample": False,
     "max_grad": 0,
+    "num_class": 397,
+    "train_period": 30.0,
+    "infer_period": 30.0,
+    "p": 0.5,
+    "n_mels": 128,
+    "mixup_p": 0.5,
+    "mixup_alpha": 0.8,
 }
 
 
@@ -49,15 +57,13 @@ def train_loop(folds, fold=0):
     # ====================================================
     # loader
     # ====================================================
-    train_folds = folds[folds["kfold"] != fold].reset_index(drop=True)
-    valid_folds = folds[folds["kfold"] == fold].reset_index(drop=True)
+    train_folds = folds[folds["fold"] != fold].reset_index(drop=True)
+    valid_folds = folds[folds["fold"] == fold].reset_index(drop=True)
 
     print(len(train_folds), len(valid_folds))
 
-    train_dataset = datasets.BirdDataset(train_folds, augmentations)
-    valid_dataset = datasets.BirdDataset(valid_folds, augmentations)
-
-    collate = datasets.Collate(tokenizer=tokenizer)
+    train_dataset = datasets.BirdClef2022Dataset(train_folds)
+    valid_dataset = datasets.BirdClef2022Dataset(valid_folds)
 
     train_loader = DataLoader(
         train_dataset,
@@ -73,71 +79,87 @@ def train_loop(folds, fold=0):
         num_workers=CONFIG["n_workers"],
         pin_memory=True,
         drop_last=False,
-        collate_fn=collate,
     )
 
-    model = models.BaselineModel(CONFIG["pretrained_model"], CONFIG)
-    model.to(CONFIG["device"])
+    model = models.BaselineModel(CONFIG)
+    model.cuda()
+
+    optimizer_params = [
+        {"params": model.att_model.head.parameters(), "lr": CONFIG["lr"]},
+        {"params": model.att_model.backbone.parameters(), "lr": CONFIG["backbone_lr"]},
+    ]
 
     optimizer = transformers.AdamW(
-        model.named_parameters(),
+        optimizer_params,
         lr=CONFIG["lr"],
         eps=1e-8,
         weight_decay=CONFIG["weight_decay"],
     )
 
-    # scheduler = transformers.get_cosine_schedule_with_warmup(
-    #     optimizer=optimizer,
-    #     num_warmup_steps=CONFIG['warmup'] * len(train_loader) * CONFIG['epochs'] / CONFIG["n_accumulate"],
-    #     num_training_steps=len(train_loader) * CONFIG['epochs'] / CONFIG["n_accumulate"],
-    # )
+    scheduler = transformers.get_cosine_schedule_with_warmup(
+        optimizer=optimizer,
+        num_warmup_steps=CONFIG["warmup"]
+        * len(train_loader)
+        * CONFIG["epochs"]
+        / CONFIG["n_accumulate"],
+        num_training_steps=len(train_loader)
+        * CONFIG["epochs"]
+        / CONFIG["n_accumulate"],
+    )
 
-    scheduler = None
+    # scheduler = None
 
     scaler = GradScaler()
+
+    mixup_p = (0.0,)
+    mixup_alpha = 0.5
+    mixupper = utils.Mixup(p=CONFIG["mixup_p"], alpha=CONFIG["mixup_alpha"])
+    thresholder = utils.ThresholdOptimizer(utils.row_wise_f1_score_micro)
 
     for epoch in range(CONFIG["epochs"]):
 
         train_f1 = engine.train_fn(
-            epoch, train_loader, model, optimizer, scheduler, CONFIG, scaler
+            epoch,
+            train_loader,
+            model,
+            optimizer,
+            scheduler,
+            CONFIG,
+            scaler,
+            mixupper,
+            thresholder,
         )
 
-        valid_f1, oof = engine.valid_fn(model, valid_loader, CONFIG)
+        print(train_f1)
 
-        print(valid_f1)
+        valid_f1 = engine.valid_fn(model, valid_loader, thresholder)
 
         writer.add_scalar(
             "valid/f1",
-            valid_f1[0],
+            valid_f1,
             CONFIG["batch_size"] * len(train_loader) * (epoch + 1) / 32,
         )
 
         writer.add_scalar("train/f1", train_f1, epoch)
 
-        for c, f1 in valid_f1[1].items():
-            writer.add_scalar(
-                f"valid/{c}",
-                f1,
-                CONFIG["batch_size"] * len(train_loader) * (epoch + 1) / 32,
-            )
+        print(f"results for epoch {epoch + 1}: f1 {valid_f1}")
 
-        print(f"results for epoch {epoch + 1}: f1 {valid_f1[0]}")
+    # torch.save(
+    #     {"model": model.state_dict()},
+    #     f"models/{CONFIG['model_name']}_{fold}.pth",
+    # )
 
-    torch.save(
-        {"model": model.state_dict()},
-        f"models/{CONFIG['model_name']}_{fold}.pth",
-    )
-
-    oof.to_csv(f"models/oof_{CONFIG['model_name']}_{fold}.csv", index=False)
+    # should probably build the oof file
+    # oof.to_csv(f"models/oof_{CONFIG['model_name']}_{fold}.csv", index=False)
 
     del model
-    return valid_f1[0]
+    return valid_f1
 
 
 if __name__ == "__main__":
     print("training birds 2022")
 
-    train_data = pd.read_csv("input/train_folds.csv")
+    train_data = pd.read_csv("input/train_metadata_new.csv")
 
     CV = []
 
