@@ -1,3 +1,3 @@
-# python -m src.create_folds
+python -m src.create_folds
 
-python -m src.train
+# python -m src.train

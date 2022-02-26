@@ -56,6 +56,13 @@ def macro_f1_similarity(
 
 ## notes
 
+## 220226
+
+start implementing this as strong baseline https://github.com/tattaka/birdclef-2021
+
+some thoughts:
+- they prebuild the mel specs before training, I guess this is fine but perhaps it makes more sense to do on the fly with something like nnAudio (GPU)
+
 ## 220225
 
 More hacking
