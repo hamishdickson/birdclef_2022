@@ -11,7 +11,6 @@ from torch.cuda.amp import autocast
 from torchaudio.transforms import AmplitudeToDB, MelSpectrogram
 
 
-
 class AdaptiveConcatPool2d(nn.Module):
     def __init__(self, sz=None):
         super().__init__()
@@ -86,6 +85,7 @@ class NormalizeMelSpec(nn.Module):
             V_fix = (V_fix - norm_min_fix) / (norm_max_fix - norm_min_fix)
             V[fix_ind] = V_fix
         return V
+
 
 class AttHead(nn.Module):
     def __init__(
@@ -162,7 +162,6 @@ class AttHead(nn.Module):
         )
 
 
-
 class AttModel(nn.Module):
     def __init__(
         self,
@@ -206,23 +205,17 @@ class AttModel(nn.Module):
         return self.head(feats[-1])
 
 
-
-
-
-
-
 class BaselineModel(nn.Module):
     def __init__(self, config, pretrained=True):
         super(BaselineModel, self).__init__()
         self.att_model = AttModel(
-            config['model_name'],
-            p=config['p'],
-            n_mels=config['n_mels'],
-            num_class=config['num_class'],
-            train_period=config['train_period'],
-            infer_period=config['infer_period'],
+            config["model_name"],
+            p=config["p"],
+            n_mels=config["n_mels"],
+            num_class=config["num_class"],
+            train_period=config["train_period"],
+            infer_period=config["infer_period"],
         )
-
 
     def forward(self, image):
         with autocast():

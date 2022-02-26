@@ -31,7 +31,7 @@ CONFIG = {
     "n_accumulate": 1,
     "n_workers": 4,
     "model_save_name": "baseline",
-    "model_name": "resnet34", # <---- just for you Eduardo
+    "model_name": "resnet34",  # <---- just for you Eduardo
     "lr": 2e-4,
     "backbone_lr": 1e-4,
     "weight_decay": 0,
@@ -44,7 +44,7 @@ CONFIG = {
     "p": 0.5,
     "n_mels": 128,
     "mixup_p": 0.5,
-    "mixup_alpha": 0.8
+    "mixup_alpha": 0.8,
 }
 
 
@@ -78,15 +78,15 @@ def train_loop(folds, fold=0):
         shuffle=False,
         num_workers=CONFIG["n_workers"],
         pin_memory=True,
-        drop_last=False
+        drop_last=False,
     )
 
     model = models.BaselineModel(CONFIG)
     model.cuda()
 
     optimizer_params = [
-        {"params": model.att_model.head.parameters(), "lr": CONFIG['lr']},
-        {"params": model.att_model.backbone.parameters(), "lr": CONFIG['backbone_lr']},
+        {"params": model.att_model.head.parameters(), "lr": CONFIG["lr"]},
+        {"params": model.att_model.backbone.parameters(), "lr": CONFIG["backbone_lr"]},
     ]
 
     optimizer = transformers.AdamW(
@@ -98,29 +98,41 @@ def train_loop(folds, fold=0):
 
     scheduler = transformers.get_cosine_schedule_with_warmup(
         optimizer=optimizer,
-        num_warmup_steps=CONFIG['warmup'] * len(train_loader) * CONFIG['epochs'] / CONFIG["n_accumulate"],
-        num_training_steps=len(train_loader) * CONFIG['epochs'] / CONFIG["n_accumulate"],
+        num_warmup_steps=CONFIG["warmup"]
+        * len(train_loader)
+        * CONFIG["epochs"]
+        / CONFIG["n_accumulate"],
+        num_training_steps=len(train_loader)
+        * CONFIG["epochs"]
+        / CONFIG["n_accumulate"],
     )
 
     # scheduler = None
 
     scaler = GradScaler()
 
-    mixup_p=0.0,
-    mixup_alpha=0.5
-    mixupper = utils.Mixup(p=CONFIG['mixup_p'], alpha=CONFIG['mixup_alpha'])
+    mixup_p = (0.0,)
+    mixup_alpha = 0.5
+    mixupper = utils.Mixup(p=CONFIG["mixup_p"], alpha=CONFIG["mixup_alpha"])
     thresholder = utils.ThresholdOptimizer(utils.row_wise_f1_score_micro)
 
     for epoch in range(CONFIG["epochs"]):
 
         train_f1 = engine.train_fn(
-            epoch, train_loader, model, optimizer, scheduler, CONFIG, scaler, mixupper, thresholder
+            epoch,
+            train_loader,
+            model,
+            optimizer,
+            scheduler,
+            CONFIG,
+            scaler,
+            mixupper,
+            thresholder,
         )
 
         print(train_f1)
 
         valid_f1 = engine.valid_fn(model, valid_loader, thresholder)
-
 
         writer.add_scalar(
             "valid/f1",

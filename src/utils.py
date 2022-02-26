@@ -40,6 +40,7 @@ class AverageMeter(object):
         self.count += n
         self.avg = self.sum / self.count
 
+
 class Mixup(object):
     def __init__(self, p=0.5, alpha=5):
         self.p = p
@@ -65,6 +66,7 @@ def row_wise_f1_score_micro(y_true, y_pred, threshold=0.5):
     return f1_score(
         y_true=y_true, y_pred=event_thresholder(y_pred, threshold), average="samples"
     )
+
 
 class ThresholdOptimizer:
     def __init__(self, loss_fn):
