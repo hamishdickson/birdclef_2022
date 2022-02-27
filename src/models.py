@@ -168,7 +168,7 @@ class AttModel(nn.Module):
         backbone="resnet34",
         p=0.5,
         n_mels=224,
-        num_class=397,
+        num_class=152,
         train_period=15.0,
         infer_period=5.0,
         in_chans=1,

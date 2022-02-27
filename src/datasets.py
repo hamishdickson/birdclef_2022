@@ -241,7 +241,7 @@ class OneOf(Compose):
     def __call__(self, y: np.ndarray, sr):
         data = y
         if self.transforms_ps and (random.random() < self.p):
-            random_state = np.random.RandomState(random.randint(0, 2**32 - 1))
+            random_state = np.random.RandomState(random.randint(0, 2 ** 32 - 1))
             t = random_state.choice(self.transforms, p=self.transforms_ps)
             data = t(y, sr)
         return data
@@ -288,11 +288,11 @@ class GaussianNoise(AudioTransform):
 
     def apply(self, y: np.ndarray, **params):
         snr = np.random.uniform(self.min_snr, self.max_snr)
-        a_signal = np.sqrt(y**2).max()
+        a_signal = np.sqrt(y ** 2).max()
         a_noise = a_signal / (10 ** (snr / 20))
 
         white_noise = np.random.randn(len(y))
-        a_white = np.sqrt(white_noise**2).max()
+        a_white = np.sqrt(white_noise ** 2).max()
         augmented = (y + white_noise * 1 / a_white * a_noise).astype(y.dtype)
         return augmented
 
@@ -306,11 +306,11 @@ class PinkNoise(AudioTransform):
 
     def apply(self, y: np.ndarray, **params):
         snr = np.random.uniform(self.min_snr, self.max_snr)
-        a_signal = np.sqrt(y**2).max()
+        a_signal = np.sqrt(y ** 2).max()
         a_noise = a_signal / (10 ** (snr / 20))
 
         pink_noise = cn.powerlaw_psd_gaussian(1, len(y))
-        a_pink = np.sqrt(pink_noise**2).max()
+        a_pink = np.sqrt(pink_noise ** 2).max()
         augmented = (y + pink_noise * 1 / a_pink * a_noise).astype(y.dtype)
         return augmented
 
@@ -514,7 +514,7 @@ class BirdClef2022Dataset(Dataset):
 
         waveform_seg = torch.Tensor(np.nan_to_num(waveform_seg))
 
-        target = np.zeros(397, dtype=np.float32)
+        target = np.zeros(152, dtype=np.float32)
         primary_label = bird2id[self.primary_label[idx]]
         target[primary_label] = 1.0
 

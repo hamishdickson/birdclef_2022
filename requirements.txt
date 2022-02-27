@@ -1,13 +1,13 @@
-numpy
+# numpy
 librosa
 soundfile
-pandas
-matplotlib
-tqdm
-scikit-learn
-torch
+# pandas
+# matplotlib
+# tqdm
+# scikit-learn
+# torch
 tensorboard
-transformers
+# transformers
 scikit-image
 opencv-python
 timm

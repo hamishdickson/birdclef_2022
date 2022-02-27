@@ -29,7 +29,7 @@ CONFIG = {
     "epochs": 10,
     "batch_size": 32,
     "n_accumulate": 1,
-    "n_workers": 4,
+    "n_workers": 16,
     "model_save_name": "baseline",
     "model_name": "resnet34",  # <---- just for you Eduardo
     "lr": 2e-4,
@@ -38,7 +38,7 @@ CONFIG = {
     "warmup": 0,
     "sample": False,
     "max_grad": 0,
-    "num_class": 397,
+    "num_class": len(datasets.target_columns),
     "train_period": 30.0,
     "infer_period": 30.0,
     "p": 0.5,
@@ -82,7 +82,10 @@ def train_loop(folds, fold=0):
     )
 
     model = models.BaselineModel(CONFIG)
-    model.cuda()
+    # print(model)
+    model.to("cuda")
+
+    print("model done")
 
     optimizer_params = [
         {"params": model.att_model.head.parameters(), "lr": CONFIG["lr"]},
@@ -135,25 +138,39 @@ def train_loop(folds, fold=0):
         valid_f1 = engine.valid_fn(model, valid_loader, thresholder)
 
         writer.add_scalar(
-            "valid/f1",
-            valid_f1,
+            "valid/thresh",
+            valid_f1["train_coef"][0],
             CONFIG["batch_size"] * len(train_loader) * (epoch + 1) / 32,
         )
-
-        writer.add_scalar("train/f1", train_f1, epoch)
+        writer.add_scalar(
+            "valid/f1",
+            valid_f1["train_f1_score"],
+            CONFIG["batch_size"] * len(train_loader) * (epoch + 1) / 32,
+        )
+        writer.add_scalar(
+            "valid/train_f1_score_05",
+            valid_f1["train_f1_score_05"],
+            CONFIG["batch_size"] * len(train_loader) * (epoch + 1) / 32,
+        )
+        writer.add_scalar(
+            "valid/train_f1_score_03",
+            valid_f1["train_f1_score_03"],
+            CONFIG["batch_size"] * len(train_loader) * (epoch + 1) / 32,
+        )
+        writer.add_scalar("train/f1", train_f1["train_f1_score"], epoch)
 
         print(f"results for epoch {epoch + 1}: f1 {valid_f1}")
 
-    # torch.save(
-    #     {"model": model.state_dict()},
-    #     f"models/{CONFIG['model_name']}_{fold}.pth",
-    # )
+    torch.save(
+        {"model": model.state_dict()},
+        f"models/{CONFIG['model_name']}_{fold}.pth",
+    )
 
     # should probably build the oof file
     # oof.to_csv(f"models/oof_{CONFIG['model_name']}_{fold}.csv", index=False)
 
     del model
-    return valid_f1
+    return valid_f1["train_f1_score"], valid_f1['train_coef'][0]
 
 
 if __name__ == "__main__":
@@ -162,8 +179,11 @@ if __name__ == "__main__":
     train_data = pd.read_csv("input/train_metadata_new.csv")
 
     CV = []
+    thresh = []
 
     for fold in range(CONFIG["n_fold"]):
         pprint(CONFIG)
-        CV.append(train_loop(train_data, fold))
+        fold_score, fold_thresh = train_loop(train_data, fold)
+        CV.append(fold_score)
+        thresh.append(fold_thresh)
     print(f"final CVs {CV} = {np.mean(CV)}")

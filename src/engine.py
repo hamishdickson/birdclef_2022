@@ -64,6 +64,7 @@ def train_fn(
     mixupper,
     thresholder,
 ):
+    print(f"train epoch {epoch}")
     losses = utils.AverageMeter()
     losses_frame = utils.AverageMeter()
     losses_clip = utils.AverageMeter()
