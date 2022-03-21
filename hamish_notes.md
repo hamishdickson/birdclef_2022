@@ -11,63 +11,22 @@ rtx 3090 FE
 
 | CV | LB | Name | Notes |
 |---- | -----| --- | --- |
-| 0.6858006854896994 | 0.60 | exp2 | old CV strategy, 5fold, wrong thresh (0.025) |
-| 0.6858006854896994 | ??? | exp3 | exp2 but with correct thresh (0.049726561999999995) not changed threshlong |
-
-
-## metric
-
-https://www.kaggle.com/c/birdclef-2022/discussion/309408
-
-```python
-import numpy as np
-from typing import List
-
-def f1_score(true_pos, false_neg, false_pos):
-    true_pos, false_neg, false_pos = float(true_pos), float(false_neg), float(false_pos)
-    if true_pos == 0 and (false_neg + false_pos) == 0:
-        return 1.0
-    else:
-        return 2 * true_pos / (2 * true_pos + false_neg + false_pos)
-
-def macro_f1_similarity(
-    y_true_all_episodes: List[List[int]], y_pred_all_episodes: List[List[int]], unique_bird_ids: List[int]
-) -> float:
-    assert len(y_true_all_episodes) == len(y_pred_all_episodes), "different number of episodes for true and pred"
-    n_episodes = len(y_true_all_episodes)
-
-    stats_dict = {k:{"tp":0, "fn":0, "fp":0} for k in unique_bird_ids}
-
-    for episode_idx in range(n_episodes):
-        for true_elem in y_true_all_episodes[episode_idx]:
-            if true_elem in unique_bird_ids:
-                if true_elem in y_pred_all_episodes[episode_idx]:
-                    stats_dict[true_elem]["tp"] += 1
-                else:
-                    stats_dict[true_elem]["fn"] += 1
-
-        for pred_el in y_pred_all_episodes[episode_idx]:
-            if pred_el in unique_bird_ids:
-                if pred_el not in y_true_all_episodes[episode_idx]:
-                    stats_dict[pred_el]["fp"] += 1
-
-
-    f1_similarity = np.mean([f1_score(
-        true_pos=item["tp"], 
-        false_neg=item["fn"], 
-        false_pos=item["fp"]
-    ) for item in stats_dict.values()])
-
-
-    return f1_similarity
-```
+| 0.6858006854896994 | 0.60 | hwd2 | old CV strategy, 5fold, wrong thresh (0.025) |
+| 0.6858006854896994 | 0.58 | hwd3 | exp2 but with correct thresh (0.049726561999999995) not changed threshlong |
+| 0.62 | 0.61 | hwd4 | 21 + aux classes, still working on CV score, subing to confirm everything works |
 
 ## notes
+
+## 220318
+
+try to train against just the 21+aux classes
+
+hwd4
 
 ## 220227
 
 have to retrain, got the wrong number of classes (should have been 152)
-exp2 + exp3
+hwd2 + hwd3
 [0.692622163355923, 0.6844865818948619, 0.6865796493069221, 0.6850770217436883, 0.6802380111471019] = 0.6858006854896994
 thresh
 [0.03769531, 0.05009766, 0.05566406, 0.05126953, 0.05390625] = 0.049726561999999995
