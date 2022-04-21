@@ -174,8 +174,7 @@ target_columns = [
     "yefcan",
     "zebdov",
 ]
-bird2id = {b: i for i, b in enumerate(target_columns)}
-id2bird = {i: b for i, b in enumerate(target_columns)}
+
 scored_birds = [
     "akiapo",
     "aniani",
@@ -199,6 +198,30 @@ scored_birds = [
     "warwhe1",
     "yefcan",
 ]
+
+def build_bird2id():
+    out = {"aux": 0}
+    c = 1
+    for b in target_columns:
+        if b in scored_birds:
+            out[b] = c
+            c += 1
+    
+    return out
+
+def build_id2bird():
+    out = {0: "aux"}
+    c = 1
+    for b in target_columns:
+        if b in scored_birds:
+            out[c] = b
+            c += 1
+
+    return out
+
+
+bird2id = build_bird2id() # {b: i for i, b in enumerate(target_columns)}
+id2bird = build_id2bird() # {i: b for i, b in enumerate(target_columns)}
 
 
 class Compose:
@@ -514,8 +537,13 @@ class BirdClef2022Dataset(Dataset):
 
         waveform_seg = torch.Tensor(np.nan_to_num(waveform_seg))
 
-        target = np.zeros(152, dtype=np.float32)
-        primary_label = bird2id[self.primary_label[idx]]
+        target = np.zeros(22, dtype=np.float32)
+
+        if self.primary_label[idx] in bird2id:
+            primary_label = bird2id[self.primary_label[idx]]
+        else:
+            primary_label = bird2id["aux"]
+
         target[primary_label] = 1.0
 
         for s in self.secondary_labels[idx]:

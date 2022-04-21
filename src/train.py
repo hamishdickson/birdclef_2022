@@ -38,7 +38,7 @@ CONFIG = {
     "warmup": 0,
     "sample": False,
     "max_grad": 0,
-    "num_class": len(datasets.target_columns),
+    "num_class": 22, #len(datasets.target_columns),
     "train_period": 30.0,
     "infer_period": 30.0,
     "p": 0.5,
@@ -114,10 +114,8 @@ def train_loop(folds, fold=0):
 
     scaler = GradScaler()
 
-    mixup_p = (0.0,)
-    mixup_alpha = 0.5
     mixupper = utils.Mixup(p=CONFIG["mixup_p"], alpha=CONFIG["mixup_alpha"])
-    thresholder = utils.ThresholdOptimizer(utils.row_wise_f1_score_micro)
+    thresholder = utils.ThresholdOptimizer(utils.comp_metric)
 
     for epoch in range(CONFIG["epochs"]):
 

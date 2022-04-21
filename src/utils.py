@@ -59,12 +59,36 @@ class Mixup(object):
             self.lam = 1.0
 
 
-def row_wise_f1_score_micro(y_true, y_pred, threshold=0.5):
+import numpy as np
+
+from sklearn.metrics import jaccard_score
+
+
+def comp_metric(target, pred, threshold=0.5):
+    pred = pred >= threshold
+    scores = []
+    scores += [jaccard_score(target[:, i], pred[:, i], pos_label=1) for i in range(1, pred.shape[1])]
+    scores += [jaccard_score(target[:, i], pred[:, i], pos_label=0) for i in range(1, pred.shape[1])]
+    return np.mean(scores)
+
+def comp_metric_old(y_true, y_pred, threshold=0.5):
+    """
+    Submissions are evaluated on a metric that is most similar to the macro F1 score. Given the amount of audio 
+    data used in this competition it wasn't feasible to label every single species found in every soundscape. 
+    Instead only a subset of species are actually scored for any given audio file. After dropping all of the 
+    un-scored rows we technically run a weighted classification accuracy with the weights set such that all of 
+    the species are assigned the same total weight and the true negatives and true positives for each species 
+    have the same weight. The extra complexity exists purely to allow us to have a great deal of control over 
+    which birds are scored for a given soundscape. For offline cross validation purposes, the macro F1 is the 
+    closest analogue to the actual metric.
+    """
+
+    # don't think this is now needed?
     def event_thresholder(x, threshold):
         return x > threshold
 
     return f1_score(
-        y_true=y_true, y_pred=event_thresholder(y_pred, threshold), average="samples"
+        y_true=y_true[:,1:], y_pred=event_thresholder(y_pred[:,1:], threshold), average="samples"
     )
 
 
