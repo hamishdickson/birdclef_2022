@@ -1,11 +1,9 @@
-import torch
-import pandas as pd
 import colorednoise as cn
-import numpy as np
 import librosa
+import numpy as np
+import pandas as pd
 import soundfile as sf
-
-from config import CFG, AudioParams
+import torch
 
 
 class Compose:
@@ -48,7 +46,7 @@ class OneOf(Compose):
     def __call__(self, y: np.ndarray, sr):
         data = y
         if self.transforms_ps and (np.random.random() < self.p):
-            random_state = np.random.RandomState(np.random.randint(0, 2 ** 32 - 1))
+            random_state = np.random.RandomState(np.random.randint(0, 2**32 - 1))
             t = random_state.choice(self.transforms, p=self.transforms_ps)
             data = t(y, sr)
         return data
@@ -95,11 +93,11 @@ class GaussianNoise(AudioTransform):
 
     def apply(self, y: np.ndarray, **params):
         snr = np.random.uniform(self.min_snr, self.max_snr)
-        a_signal = np.sqrt(y ** 2).max()
+        a_signal = np.sqrt(y**2).max()
         a_noise = a_signal / (10 ** (snr / 20))
 
         white_noise = np.random.randn(len(y))
-        a_white = np.sqrt(white_noise ** 2).max()
+        a_white = np.sqrt(white_noise**2).max()
         augmented = (y + white_noise * 1 / a_white * a_noise).astype(y.dtype)
         return augmented
 
@@ -113,11 +111,11 @@ class PinkNoise(AudioTransform):
 
     def apply(self, y: np.ndarray, **params):
         snr = np.random.uniform(self.min_snr, self.max_snr)
-        a_signal = np.sqrt(y ** 2).max()
+        a_signal = np.sqrt(y**2).max()
         a_noise = a_signal / (10 ** (snr / 20))
 
         pink_noise = cn.powerlaw_psd_gaussian(1, len(y))
-        a_pink = np.sqrt(pink_noise ** 2).max()
+        a_pink = np.sqrt(pink_noise**2).max()
         augmented = (y + pink_noise * 1 / a_pink * a_noise).astype(y.dtype)
         return augmented
 
@@ -212,10 +210,17 @@ class CosineVolume(AudioTransform):
         return y * dbs
 
 
-def Audio_to_Array(path, labels_df, SR=CFG.sample_rate, duration=CFG.period, use_highest=False):
+def load_audio(path, target_sr, rest_type="kaiser_fast"):
     y, sr = sf.read(path, always_2d=True)
     y = np.mean(y, 1)  # there is (X, 2) array
 
+    if sr != target_sr:
+        y = librosa.resample(y, orig_sr=sr, target_sr=target_sr, res_type=rest_type)
+    return y
+
+
+def cvt_audio_to_array(path, labels_df, target_sr, duration, use_highest=False):
+    y = load_audio(path, target_sr)
     try:
         samples = labels_df.loc[path]
     except KeyError:
@@ -234,7 +239,17 @@ def Audio_to_Array(path, labels_df, SR=CFG.sample_rate, duration=CFG.period, use
         end = int(sample.seconds)
         start = end - duration
 
-    y = y[SR * start: SR * end]
+    y = y[target_sr * start : target_sr * end]
+    return y
+
+
+def crop_audio_center(y, target_sr, duration):
+    """Crop a center clip of duration from audio"""
+    center = len(y) // 2
+    start = max(0, center - (duration * target_sr / 2))
+    end = start + (duration * target_sr)
+
+    y = y[int(start) : int(end)]
     return y
 
 
@@ -259,12 +274,10 @@ def crop_or_pad(y, length, sr, train=True, probs=None):
         elif probs is None:
             start = np.random.randint(len(y) - length)
         else:
-            start = (
-                    np.random.choice(np.arange(len(probs)), p=probs) + np.random.random()
-            )
+            start = np.random.choice(np.arange(len(probs)), p=probs) + np.random.random()
             start = int(sr * (start))
 
-        y = y[start: start + length]
+        y = y[start : start + length]
 
     return y.astype(np.float32)
 

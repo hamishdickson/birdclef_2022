@@ -1,17 +1,19 @@
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
+import torch.nn.functional as F
+
 
 def init_layer(layer):
     nn.init.xavier_uniform_(layer.weight)
 
     if hasattr(layer, "bias"):
         if layer.bias is not None:
-            layer.bias.data.fill_(0.)
+            layer.bias.data.fill_(0.0)
 
 
 def init_bn(bn):
-    bn.bias.data.fill_(0.)
+    bn.bias.data.fill_(0.0)
     bn.weight.data.fill_(1.0)
 
 
@@ -60,16 +62,14 @@ def pad_framewise_output(framewise_output: torch.Tensor, frames_num: int):
         framewise_output.unsqueeze(1),
         size=(frames_num, framewise_output.size(2)),
         align_corners=True,
-        mode="bilinear").squeeze(1)
+        mode="bilinear",
+    ).squeeze(1)
 
     return output
 
 
 class AttBlockV2(nn.Module):
-    def __init__(self,
-                 in_features: int,
-                 out_features: int,
-                 activation="linear"):
+    def __init__(self, in_features: int, out_features: int, activation="linear"):
         super().__init__()
 
         self.activation = activation
@@ -79,14 +79,16 @@ class AttBlockV2(nn.Module):
             kernel_size=1,
             stride=1,
             padding=0,
-            bias=True)
+            bias=True,
+        )
         self.cla = nn.Conv1d(
             in_channels=in_features,
             out_channels=out_features,
             kernel_size=1,
             stride=1,
             padding=0,
-            bias=True)
+            bias=True,
+        )
 
         self.init_weights()
 
@@ -103,7 +105,7 @@ class AttBlockV2(nn.Module):
         return pred, logit
 
     def nonlinear_transform(self, x):
-        if self.activation == 'linear':
+        if self.activation == "linear":
             return x
-        elif self.activation == 'sigmoid':
+        elif self.activation == "sigmoid":
             return torch.sigmoid(x)
