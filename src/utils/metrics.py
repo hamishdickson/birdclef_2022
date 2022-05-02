@@ -36,7 +36,10 @@ class MetricMeter(object):
     @property
     def avg(self):
         ranges = np.arange(0.1, 1, 0.1)
-        scores = [metrics.f1_score(np.array(self.y_true), np.array(self.y_pred) > x, average="micro") for x in ranges]
+        scores = [
+            metrics.f1_score(np.array(self.y_true), np.array(self.y_pred) > x, average="micro")
+            for x in ranges
+        ]
         best = np.argmax(scores)
         return {
             "f1_at_03": scores[2],

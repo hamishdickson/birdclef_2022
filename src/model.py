@@ -1,52 +1,50 @@
+import numpy as np
+import timm
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.cuda.amp import autocast, GradScaler
-import numpy as np
-import timm
-
+from torch.cuda.amp import autocast
+from torchaudio.transforms import AmplitudeToDB, MelSpectrogram
 from torchlibrosa.augmentation import SpecAugmentation
-from torchaudio.transforms import MelSpectrogram, AmplitudeToDB
 
 from layers import AttBlockV2, init_bn, init_layer
-from loss import mixup_criterion, loss_fn
-from utils.general import mixup, cutmix
+from loss import loss_fn, mixup_criterion
+from utils.general import cutmix, mixup
 from utils.transforms import mono_to_color
-
-from config import CFG, AudioParams
 
 
 class TimmSED(nn.Module):
-    def __init__(self, base_model_name: str, pretrained=False, num_classes=24, in_channels=1):
+    def __init__(self, base_model_name: str, cfg, pretrained=False, num_classes=24):
         super().__init__()
+        self.cfg = cfg
 
         self.mel_trans = MelSpectrogram(
-            sample_rate=CFG.sample_rate,
-            n_fft=CFG.n_fft,
-            hop_length=CFG.hop_length,
-            f_min=CFG.fmin,
-            f_max=CFG.fmax,
-            n_mels=CFG.n_mels)
+            sample_rate=self.cfg.sample_rate,
+            n_fft=self.cfg.n_fft,
+            hop_length=self.cfg.hop_length,
+            f_min=self.cfg.fmin,
+            f_max=self.cfg.fmax,
+            n_mels=self.cfg.n_mels,
+        )
         self.amp_db_tran = AmplitudeToDB()
 
-        self.spec_augmenter = SpecAugmentation(time_drop_width=64 // 2, time_stripes_num=2,
-                                               freq_drop_width=8 // 2, freq_stripes_num=2)
+        self.spec_augmenter = SpecAugmentation(
+            time_drop_width=64 // 2, time_stripes_num=2, freq_drop_width=8 // 2, freq_stripes_num=2
+        )
 
-        self.bn0 = nn.BatchNorm2d(CFG.n_mels)
+        self.bn0 = nn.BatchNorm2d(self.cfg.n_mels)
 
-        base_model = timm.create_model(
-            base_model_name, pretrained=pretrained, in_chans=in_channels)
-        layers = list(base_model.children())[:-2]
-        self.encoder = nn.Sequential(*layers)
+        self.encoder = timm.create_model(base_model_name, pretrained=pretrained)
 
-        if hasattr(base_model, "fc"):
-            in_features = base_model.fc.in_features
+        if hasattr(self.encoder, "fc"):
+            in_features = self.encoder.fc.in_features
         else:
-            in_features = base_model.classifier.in_features
+            in_features = self.encoder.classifier.in_features
+
+        self.encoder.reset_classifier(0, "")
 
         self.fc1 = nn.Linear(in_features, in_features, bias=True)
-        self.att_block = AttBlockV2(
-            in_features, num_classes, activation="sigmoid")
+        self.att_block = AttBlockV2(in_features, num_classes, activation="sigmoid")
 
         self.init_weight()
 
@@ -63,8 +61,8 @@ class TimmSED(nn.Module):
             with torch.no_grad():
                 x = self.compute_melspec(x)
                 x = mono_to_color(x).transpose(1, 3)  # (batch_size, 3, time_steps, mel_bins)
-                x = x - CFG.mean
-                x = x / CFG.std
+                x = x - self.cfg.mean
+                x = x / self.cfg.std
 
                 if self.training and do_mixup:
                     if np.random.rand() < 0.5:
@@ -89,17 +87,17 @@ class TimmSED(nn.Module):
         x2 = F.avg_pool1d(x, kernel_size=3, stride=1, padding=1)
         x = x1 + x2
 
-        x = F.dropout(x, p=CFG.dropout, training=self.training)
+        x = F.dropout(x, p=self.cfg.dropout, training=self.training)
         x = x.transpose(1, 2)
         x = F.relu_(self.fc1(x))
         x = x.transpose(1, 2)
-        x = F.dropout(x, p=CFG.dropout, training=self.training)
+        x = F.dropout(x, p=self.cfg.dropout, training=self.training)
 
         clipwise_output, logit = self.att_block(x)
 
         output_dict = {
-            'clipwise_output': clipwise_output,  # (n_samples, n_class)
-            'logit': logit,  # (n_samples, n_class)
+            "clipwise_output": clipwise_output,  # (n_samples, n_class)
+            "logit": logit,  # (n_samples, n_class)
         }
 
         loss = None
