@@ -1,8 +1,9 @@
-import time
-import random
 import os
-import torch
+import random
+import time
+
 import numpy as np
+import torch
 
 
 class Timer:
@@ -42,7 +43,7 @@ def set_seed(seed=42):
 def rand_bbox(size, lam):
     W = size[2]
     H = size[3]
-    cut_rat = np.sqrt(1. - lam)
+    cut_rat = np.sqrt(1.0 - lam)
     cut_w = int(W * cut_rat)
     cut_h = int(H * cut_rat)
 
