@@ -1,4 +1,6 @@
+import imp
 import time
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -62,6 +64,10 @@ class Trainer:
     def __init__(self, cfg, device="cuda"):
         self.cfg = cfg
         self.device = device
+        self._output_dir = (
+            Path(self.cfg.output_dir)
+            / f"{time.strftime('%D-%T').replace('/', '-')}-{self.cfg.exp_name}"
+        )
 
     def train(self, train_dataloader, valid_dataloader):
         print(f"Fold {self.cfg.fold} Training")
@@ -105,6 +111,7 @@ class Trainer:
         model = model.to(self.device)
 
         best_score = -np.inf
+        save_path = None
 
         for epoch in range(self.cfg.epochs):
             print("Starting {} epoch...".format(epoch + 1))
@@ -138,10 +145,16 @@ class Trainer:
                         f"Epoch {epoch + 1} - train_{key}:{train_avg[key]:0.5f}  valid_{key}:{valid_avg[key]:0.5f}"
                     )
 
-            if valid_avg["f1_at_best"][1] > best_score:
-                print(
-                    f">>>>>>>> Model Improved From {best_score} ----> {valid_avg['f1_at_best'][1]}"
+            new_best = valid_avg.get("masked_f1_at_best", valid_avg["f1_at_best"])[1]
+            if new_best > best_score:
+                self._output_dir.mkdir(exist_ok=True, parents=True)
+                new_save_path = (
+                    self._output_dir
+                    / f"fold-{self.cfg.fold}-{self.cfg.base_model_name}-{self.cfg.exp_name}-epoch-{epoch}-f1-{new_best:.3f}-{valid_avg['f1_at_best'][1]:.3f}.bin"
                 )
-                print(f"other scores here... {valid_avg['f1_at_03']}, {valid_avg['f1_at_05']}")
-                torch.save(model.state_dict(), f"fold-{self.cfg.fold}.bin")
-                best_score = valid_avg["f1_at_best"][1]
+                print(f">>>>>>>> Model Improved From {best_score} ----> {new_best}")
+                torch.save(model.state_dict(), new_save_path)
+                if save_path:
+                    save_path.unlink()  # removes older checkpoints
+                best_score = new_best
+                save_path = new_save_path

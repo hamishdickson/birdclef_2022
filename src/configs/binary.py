@@ -3,6 +3,9 @@ import torch
 
 
 class CFG:
+    exp_name = ""
+    output_dir = "../exp/binary/"
+
     # List[Tuple[audio_root, csv_path]]
     train_data = [
         (

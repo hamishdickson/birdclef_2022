@@ -65,12 +65,15 @@ def create_df():
         df.loc[val_index, "kfold"] = int(n)
     df["kfold"] = df["kfold"].astype(int)
 
-    df = df[df["secondary_labels"].apply(lambda x: len(ast.literal_eval(x))) == 0]
+    # df = df[df["secondary_labels"].apply(lambda x: len(ast.literal_eval(x))) == 0]
+    # df = df.head(1000)  # for deebug
     return df, labels_df
 
 
 if __name__ == "__main__":
-    set_seed(CFG.seed)
+    set_seed(
+        CFG.seed + CFG.fold
+    )  # make sure each fold has different seed set, dataset split seed set separately
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     df, labels_df = create_df()
