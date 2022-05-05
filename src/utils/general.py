@@ -59,9 +59,13 @@ def rand_bbox(size, lam):
     return bbx1, bby1, bbx2, bby2
 
 
-def cutmix(data, targets, alpha):
+def cutmix(data, targets, alpha, weights=None):
     indices = torch.randperm(data.size(0))
     shuffled_targets = targets[indices]
+    if weights is not None:
+        shuffled_weights = weights[indices]
+    else:
+        shuffled_weights = None
 
     lam = np.random.beta(alpha, alpha)
     bbx1, bby1, bbx2, bby2 = rand_bbox(data.size(), lam)
@@ -69,16 +73,33 @@ def cutmix(data, targets, alpha):
     # adjust lambda to exactly match pixel ratio
     lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (data.size()[-1] * data.size()[-2]))
 
-    new_targets = [targets, shuffled_targets, lam]
+    new_targets = {
+        "targets1": targets,
+        "targets2": shuffled_targets,
+        "lambda": lam,
+        "weights1": weights,
+        "weights2": shuffled_weights,
+    }
     return data, new_targets
 
 
-def mixup(data, targets, alpha):
+def mixup(data, targets, alpha, weights=None):
     indices = torch.randperm(data.size(0))
     shuffled_data = data[indices]
     shuffled_targets = targets[indices]
+    if weights is not None:
+        shuffled_weights = weights[indices]
+    else:
+        shuffled_weights = None
 
     lam = np.random.beta(alpha, alpha)
     new_data = data * lam + shuffled_data * (1 - lam)
     new_targets = [targets, shuffled_targets, lam]
+    new_targets = {
+        "targets1": targets,
+        "targets2": shuffled_targets,
+        "lambda": lam,
+        "weights1": weights,
+        "weights2": shuffled_weights,
+    }
     return new_data, new_targets
