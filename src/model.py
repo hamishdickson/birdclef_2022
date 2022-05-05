@@ -55,7 +55,7 @@ class TimmSED(nn.Module):
         init_bn(self.bn0)
         init_layer(self.fc1)
 
-    def forward(self, x, targets=None, do_mixup=False):
+    def forward(self, x, targets=None, do_mixup=False, weights=None):
         # (batch_size, len_audio)
         with autocast(enabled=False):
             with torch.no_grad():
@@ -66,9 +66,9 @@ class TimmSED(nn.Module):
 
                 if self.training and do_mixup:
                     if np.random.rand() < 0.5:
-                        x, targets = mixup(x, targets, 0.4)
+                        x, targets = mixup(x, targets, self.cfg.mixup_alpha, weights=weights)
                     else:
-                        x, targets = cutmix(x, targets, 0.4)
+                        x, targets = cutmix(x, targets, self.cfg.mixup_alpha, weights=weights)
 
         x = x.transpose(1, 3)  # (batch_size, mel_bins, time_steps, 3)
         x = self.bn0(x)
@@ -105,6 +105,6 @@ class TimmSED(nn.Module):
             if do_mixup:
                 loss = mixup_criterion(output_dict["logit"], targets)
             else:
-                loss = loss_fn(output_dict["logit"], targets)
+                loss = loss_fn(output_dict["logit"], targets, weights=weights)
         output_dict["loss"] = loss
         return output_dict

@@ -28,16 +28,20 @@ class MetricMeter(object):
     def reset(self):
         self.y_true = []
         self.y_pred = []
+        self.y_true_masked = []
+        self.y_pred_masked = []
 
-    def update(self, y_true, y_pred):
+    def update(self, y_true, y_pred, mask=None):
         self.y_true.extend(y_true.cpu().detach().numpy().tolist())
         self.y_pred.extend(y_pred.cpu().detach().numpy().tolist())
+        if mask is not None:
+            self.y_true_masked.extend(y_true[mask].cpu().detach().numpy().tolist())
+            self.y_pred_masked.extend(y_pred[mask].cpu().detach().numpy().tolist())
 
-    @property
-    def avg(self):
-        ranges = np.arange(0.1, 1, 0.1)
+    @staticmethod
+    def score(y_true, y_pred, ranges=np.arange(0.1, 1, 0.1)):
         scores = [
-            metrics.f1_score(np.array(self.y_true), np.array(self.y_pred) > x, average="micro")
+            metrics.f1_score(np.array(y_true), np.array(y_pred) > x, average="micro")
             for x in ranges
         ]
         best = np.argmax(scores)
@@ -46,3 +50,11 @@ class MetricMeter(object):
             "f1_at_05": scores[4],
             "f1_at_best": (ranges[best], scores[best]),
         }
+
+    @property
+    def avg(self):
+        scores = self.score(self.y_true, self.y_pred)
+        if len(self.y_true_masked):
+            scores_masked = self.score(self.y_true_masked, self.y_pred_masked)
+            scores.update({f"masked_{k}": v for k, v in scores_masked.items()})
+        return scores

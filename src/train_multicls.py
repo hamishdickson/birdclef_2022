@@ -42,6 +42,12 @@ def create_df():
     )
     df["len_new_target"] = df["new_target"].map(lambda x: len(x.split()))
 
+    df["is_scored"] = df["new_target"].apply(
+        lambda birds: any([bird in CFG.scored_birds for bird in birds.split()])
+    )
+
+    df["weight"] = df["is_scored"].apply(lambda x: CFG.scored_weight if x else 1)
+
     path_df = pd.DataFrame(all_path, columns=["file_path"])
     path_df["filename"] = path_df["file_path"].map(
         lambda x: (x.split("/")[-2] + "/" + x.split("/")[-1]).replace(".npy", "")
@@ -58,6 +64,8 @@ def create_df():
     for n, (trn_index, val_index) in enumerate(kfold.split(df, df["primary_label"])):
         df.loc[val_index, "kfold"] = int(n)
     df["kfold"] = df["kfold"].astype(int)
+
+    df = df[df["secondary_labels"].apply(lambda x: len(ast.literal_eval(x))) == 0]
     return df, labels_df
 
 

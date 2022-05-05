@@ -109,6 +109,8 @@ class WaveformDataset(BinaryDataset):
 
         wav_path = sample["file_path"]
         labels = sample["new_target"]
+        weight = float(sample["weight"])
+        is_scored = sample["is_scored"]
 
         with LOADTIMER:
             y = cvt_audio_to_array(
@@ -141,4 +143,6 @@ class WaveformDataset(BinaryDataset):
         return {
             "audio": y,
             "targets": targets,
+            "weights": weight,
+            "is_scored": is_scored,
         }

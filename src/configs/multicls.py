@@ -11,14 +11,18 @@ class CFG:
     epochs = 23
     cutmix_and_mixup_epochs = 18
     fold = 0  # [0, 1, 2, 3, 4]
-    dropout = 0.1
+    dropout = 0.5
     N_FOLDS = 5
     LR = 2 * 1e-3
     ETA_MIN = 1e-6
     WEIGHT_DECAY = 1e-6
+    mixup_alpha = 0.4
+    scored_weight = 10
     train_bs = 32  # 32
     valid_bs = 32  # 64
-    base_model_name = "tf_efficientnet_b0_ns"
+    base_model_name = "tf_efficientnet_b3_ns"
+    starting_weights = None  # "fold-0-b3-779.bin"
+    load_up_to_layer = None  # 1
     apex = True
     nb_workers = 6
 
@@ -44,7 +48,29 @@ class CFG:
                       reccar redava redjun redpha1 refboo rempar rettro ribgul rinduc rinphe rocpig rorpar rudtur ruff \
                       saffin sander semplo sheowl shtsan skylar snogoo sooshe sooter1 sopsku1 sora spodov sposan \
                       towsol wantat1 warwhe1 wesmea wessan wetshe whfibi whiter whttro wiltur yebcar yefcan zebdov".split()
-
+    scored_birds = [
+        "akiapo",
+        "aniani",
+        "apapan",
+        "barpet",
+        "crehon",
+        "elepai",
+        "ercfra",
+        "hawama",
+        "hawcre",
+        "hawgoo",
+        "hawhaw",
+        "hawpet1",
+        "houfin",
+        "iiwi",
+        "jabwar",
+        "maupar",
+        "omao",
+        "puaioh",
+        "skylar",
+        "warwhe1",
+        "yefcan",
+    ]
     period = 5
     n_mels = 224  # 128
     fmin = 20

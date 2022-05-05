@@ -22,8 +22,12 @@ def train_fn(model, data_loader, device, optimizer, scheduler, do_mixup=False, u
         optimizer.zero_grad()
         inputs = data["audio"].to(device)
         targets = data["targets"].to(device)
+        weights = None
+        if "weights" in data.keys():
+            weights = data["weights"].to(device)
+
         with autocast(enabled=use_apex):
-            outputs = model(inputs, targets=targets, do_mixup=do_mixup)
+            outputs = model(inputs, targets=targets, do_mixup=do_mixup, weights=weights)
             loss = outputs["loss"]
 
         scaler.scale(loss).backward()
@@ -32,7 +36,7 @@ def train_fn(model, data_loader, device, optimizer, scheduler, do_mixup=False, u
 
         scheduler.step()
         losses.update(loss.item(), inputs.size(0))
-        scores.update(targets, outputs["clipwise_output"])
+        scores.update(targets, outputs["clipwise_output"], mask=data.get("is_scored"))
         tk0.set_postfix(loss=losses.avg)
     return scores.avg, losses.avg
 
@@ -49,7 +53,7 @@ def valid_fn(model, data_loader, device):
             outputs = model(inputs)
             loss = loss_fn(outputs["logit"], targets)
             losses.update(loss.item(), inputs.size(0))
-            scores.update(targets, outputs["clipwise_output"])
+            scores.update(targets, outputs["clipwise_output"], mask=data.get("is_scored"))
             tk0.set_postfix(loss=losses.avg)
     return scores.avg, losses.avg
 
@@ -68,6 +72,26 @@ class Trainer:
             pretrained=self.cfg.pretrained,
             num_classes=self.cfg.num_classes,
         )
+
+        if self.cfg.starting_weights:
+            weigths_dict = torch.load(self.cfg.starting_weights)
+
+            if self.cfg.load_up_to_layer:
+                for i, key in enumerate(weigths_dict.keys()):
+                    if (
+                        "encoder.blocks" in key
+                        and int(key.split(".")[2]) > self.cfg.load_up_to_layer
+                    ):
+                        to_remove = i
+                        break
+
+                weigths_dict = {
+                    k: v for i, (k, v) in enumerate(weigths_dict.items()) if i < to_remove
+                }
+
+            loaded_keys = model.load_state_dict(weigths_dict, strict=False)
+            print(f"Loaded weights from {self.cfg.starting_weights}")
+            print(loaded_keys)
 
         optimizer = transformers.AdamW(
             model.parameters(), lr=self.cfg.LR, weight_decay=self.cfg.WEIGHT_DECAY
@@ -104,15 +128,15 @@ class Trainer:
             print(
                 f"Epoch {epoch + 1} - avg_train_loss: {train_loss:.5f}  avg_val_loss: {valid_loss:.5f}  time: {elapsed:.0f}s"
             )
-            print(
-                f"Epoch {epoch + 1} - train_f1_at_03:{train_avg['f1_at_03']:0.5f}  valid_f1_at_03:{valid_avg['f1_at_03']:0.5f}"
-            )
-            print(
-                f"Epoch {epoch + 1} - train_f1_at_05:{train_avg['f1_at_05']:0.5f}  valid_f1_at_05:{valid_avg['f1_at_05']:0.5f}"
-            )
-            print(
-                f"Epoch {epoch + 1} - train_f1_at_{train_avg['f1_at_best'][0]}:{train_avg['f1_at_best'][1]:0.5f}  valid_f1_at_{valid_avg['f1_at_best'][0]}:{valid_avg['f1_at_best'][1]:0.5f}"
-            )
+            for key in valid_avg.keys():
+                if "best" in key:
+                    print(
+                        f"Epoch {epoch + 1} - train_{key.replace('best', str(train_avg[key][0]))}:{train_avg[key][1]:0.5f}  valid_{key.replace('best', str(valid_avg[key][0]))}:{valid_avg[key][1]:0.5f}"
+                    )
+                else:
+                    print(
+                        f"Epoch {epoch + 1} - train_{key}:{train_avg[key]:0.5f}  valid_{key}:{valid_avg[key]:0.5f}"
+                    )
 
             if valid_avg["f1_at_best"][1] > best_score:
                 print(
