@@ -99,10 +99,12 @@ class WaveformDataset(BinaryDataset):
         duration: float,
         target_columns: list,
         mode="train",
+        split_audio_root=None,
     ):
         super().__init__(df, sr, duration, mode=mode)
         self.labels_df = labels_df
         self.target_columns = target_columns
+        self.split_audio_root = split_audio_root
 
     def __getitem__(self, idx: int):
         sample = self.df.loc[idx, :]
@@ -119,6 +121,7 @@ class WaveformDataset(BinaryDataset):
                 target_sr=self.sr,
                 duration=self.duration,
                 use_highest=self.mode != "train",
+                split_audio_root=self.split_audio_root,
             )
 
         if len(y) > 0 and self.wave_transforms:

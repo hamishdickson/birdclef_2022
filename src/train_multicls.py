@@ -19,6 +19,7 @@ def create_dataset(df, labels_df, mode, batch_size, nb_workers, shuffle):
         duration=CFG.period,
         target_columns=CFG.target_columns,
         mode=mode,
+        split_audio_root=CFG.split_audios_path,
     )
     dataloader = torch.utils.data.DataLoader(
         dataset,
