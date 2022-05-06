@@ -7,6 +7,7 @@ class CFG:
     output_dir = "../exp/multiclass/"
 
     audios_path = "/media/nvme/Datasets/bird/2022/train_audio/*/*.ogg"
+    split_audios_path = "/media/nvme/Datasets/bird/2022/train_np/"
     train_metadata = "/media/nvme/Datasets/bird/2022/train_metadata.csv"
     train_labels = "/media/nvme/Datasets/bird/2022/audio_images5/train_soundscapes.csv"
 
