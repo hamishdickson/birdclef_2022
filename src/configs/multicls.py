@@ -3,7 +3,11 @@ import torch
 
 
 class CFG:
+    exp_name = "weight5"  # this goes to the save filename
+    output_dir = "../exp/multiclass/"
+
     audios_path = "/media/nvme/Datasets/bird/2022/train_audio/*/*.ogg"
+    split_audios_path = "/media/nvme/Datasets/bird/2022/train_np/"
     train_metadata = "/media/nvme/Datasets/bird/2022/train_metadata.csv"
     train_labels = "/media/nvme/Datasets/bird/2022/audio_images5/train_soundscapes.csv"
 
@@ -17,7 +21,7 @@ class CFG:
     ETA_MIN = 1e-6
     WEIGHT_DECAY = 1e-6
     mixup_alpha = 0.4
-    scored_weight = 10
+    scored_weight = 5
     train_bs = 32  # 32
     valid_bs = 32  # 64
     base_model_name = "tf_efficientnet_b3_ns"
