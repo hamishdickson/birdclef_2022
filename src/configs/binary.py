@@ -3,6 +3,9 @@ import torch
 
 
 class CFG:
+    exp_name = ""
+    output_dir = "../exp/binary/"
+
     # List[Tuple[audio_root, csv_path]]
     train_data = [
         (
@@ -32,6 +35,7 @@ class CFG:
     LR = 2 * 1e-3
     ETA_MIN = 1e-6
     WEIGHT_DECAY = 1e-6
+    mixup_alpha = 0.4
     train_bs = 32  # 32
     valid_bs = 32  # 64
     base_model_name = "tf_efficientnet_b0_ns"

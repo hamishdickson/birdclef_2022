@@ -1,3 +1,5 @@
+import os.path as osp
+
 import colorednoise as cn
 import librosa
 import numpy as np
@@ -219,8 +221,7 @@ def load_audio(path, target_sr, rest_type="kaiser_fast"):
     return y
 
 
-def cvt_audio_to_array(path, labels_df, target_sr, duration, use_highest=False):
-    y = load_audio(path, target_sr)
+def sample_clip_start_from_df(path, labels_df, duration, use_highest=False):
     try:
         samples = labels_df.loc[path]
     except KeyError:
@@ -238,8 +239,21 @@ def cvt_audio_to_array(path, labels_df, target_sr, duration, use_highest=False):
 
         end = int(sample.seconds)
         start = end - duration
+    return start, end
 
-    y = y[target_sr * start : target_sr * end]
+
+def cvt_audio_to_array(
+    path, labels_df, target_sr, duration, split_audio_root=None, use_highest=False
+):
+    start, end = sample_clip_start_from_df(path, labels_df, duration, use_highest=use_highest)
+    if split_audio_root is not None:
+        new_path = osp.join(
+            split_audio_root, "/".join(path.split("/")[-2:]).replace(".ogg", f"_{str(end)}.ogg")
+        )
+        y = load_audio(new_path, target_sr)
+    else:
+        y = load_audio(path, target_sr)
+        y = y[target_sr * start : target_sr * end]
     return y
 
 
