@@ -28,7 +28,7 @@ def mixup_criterion(preds, new_targets):
         new_targets["weights2"],
     )
 
-    criterion = FocalLoss()
+    criterion = FocalLoss(alpha=0.5)
     loss1 = lam * criterion(preds, targets1)
     loss2 = (1 - lam) * criterion(preds, targets2)
     if weights1 is not None and weights2 is not None:
@@ -38,7 +38,7 @@ def mixup_criterion(preds, new_targets):
 
 
 def loss_fn(logits, targets, weights=None):
-    loss_fct = FocalLoss()
+    loss_fct = FocalLoss(alpha=0.5)
     loss = loss_fct(logits, targets)
     if weights is not None:
         loss = (loss * weights.unsqueeze(-1)).sum(0) / weights.sum()
