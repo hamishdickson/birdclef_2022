@@ -1,5 +1,6 @@
 import ast
 import glob
+from pathlib import Path
 
 import pandas as pd
 import torch
@@ -35,39 +36,41 @@ def create_df():
     all_path = glob.glob(CFG.audios_path)
 
     df = pd.read_csv(CFG.train_metadata)
+    if not ("new_target" in df.columns and "kfold" in df.columns):
+        print("DataFrame not processed. Processing now...")
+        df["new_target"] = (
+            df["primary_label"]
+            + " "
+            + df["secondary_labels"].map(lambda x: " ".join(ast.literal_eval(x)))
+        )
+        df["len_new_target"] = df["new_target"].map(lambda x: len(x.split()))
 
-    df["new_target"] = (
-        df["primary_label"]
-        + " "
-        + df["secondary_labels"].map(lambda x: " ".join(ast.literal_eval(x)))
-    )
-    df["len_new_target"] = df["new_target"].map(lambda x: len(x.split()))
+        df["is_scored"] = df["new_target"].apply(
+            lambda birds: any([bird in CFG.scored_birds for bird in birds.split()])
+        )
 
-    df["is_scored"] = df["new_target"].apply(
-        lambda birds: any([bird in CFG.scored_birds for bird in birds.split()])
-    )
+        df["weight"] = df["is_scored"].apply(lambda x: CFG.scored_weight if x else 1)
 
-    df["weight"] = df["is_scored"].apply(lambda x: CFG.scored_weight if x else 1)
+        path_df = pd.DataFrame(all_path, columns=["file_path"])
+        path_df["filename"] = path_df["file_path"].map(
+            lambda x: (x.split("/")[-2] + "/" + x.split("/")[-1]).replace(".npy", "")
+        )
 
-    path_df = pd.DataFrame(all_path, columns=["file_path"])
-    path_df["filename"] = path_df["file_path"].map(
-        lambda x: (x.split("/")[-2] + "/" + x.split("/")[-1]).replace(".npy", "")
-    )
+        df = pd.merge(df, path_df, on="filename")
 
-    df = pd.merge(df, path_df, on="filename")
+        kfold = StratifiedKFold(n_splits=CFG.N_FOLDS, shuffle=True, random_state=42)
+        for n, (trn_index, val_index) in enumerate(kfold.split(df, df["primary_label"])):
+            df.loc[val_index, "kfold"] = int(n)
+        df["kfold"] = df["kfold"].astype(int)
+        df.to_csv(str(Path(__file__).parent / "../data/train_metadata.csv"), index=False)
+
+    # df = df[df["secondary_labels"].apply(lambda x: len(ast.literal_eval(x))) == 0]
+    # df = df.head(1000)  # for deebug
     labels_df = pd.read_csv(CFG.train_labels)
     labels_df = labels_df.merge(
         df[["new_target", "file_path"]], left_on="filepath", right_on="file_path", how="inner"
     )[["file_path", "new_target", "bird_pred", "seconds"]]
     labels_df = labels_df.set_index("file_path")
-
-    kfold = StratifiedKFold(n_splits=CFG.N_FOLDS, shuffle=True, random_state=42)
-    for n, (trn_index, val_index) in enumerate(kfold.split(df, df["primary_label"])):
-        df.loc[val_index, "kfold"] = int(n)
-    df["kfold"] = df["kfold"].astype(int)
-
-    # df = df[df["secondary_labels"].apply(lambda x: len(ast.literal_eval(x))) == 0]
-    # df = df.head(1000)  # for deebug
     return df, labels_df
 
 
