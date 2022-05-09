@@ -19,7 +19,7 @@ class FocalLoss(nn.Module):
         return loss
 
 
-def mixup_criterion(preds, new_targets):
+def mixup_criterion(preds, new_targets, alpha=0.5):
     targets1, targets2, lam, weights1, weights2 = (
         new_targets["targets1"],
         new_targets["targets2"],
@@ -28,7 +28,7 @@ def mixup_criterion(preds, new_targets):
         new_targets["weights2"],
     )
 
-    criterion = FocalLoss(alpha=0.5)
+    criterion = FocalLoss(alpha=alpha)
     loss1 = lam * criterion(preds, targets1)
     loss2 = (1 - lam) * criterion(preds, targets2)
     if weights1 is not None and weights2 is not None:
@@ -37,8 +37,8 @@ def mixup_criterion(preds, new_targets):
     return loss1.mean() + loss2.mean()
 
 
-def loss_fn(logits, targets, weights=None):
-    loss_fct = FocalLoss(alpha=0.5)
+def loss_fn(logits, targets, weights=None, alpha=0.5):
+    loss_fct = FocalLoss(alpha=alpha)
     loss = loss_fct(logits, targets)
     if weights is not None:
         loss = (loss * weights.unsqueeze(-1)).sum(0) / weights.sum()

@@ -1,1 +1,1 @@
-python -m src.engine
+python -m src.train_transformer
