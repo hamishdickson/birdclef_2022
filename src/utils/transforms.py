@@ -258,6 +258,11 @@ def cvt_audio_to_array(
 
 
 def sample_30sec_clip(path, labels_df, duration, use_highest=False):
+    # handle key error
+    if path == "../data/train_audio/brant/XC294370.ogg":
+        path = "../data/train_audio/gadwal/XC294370.ogg"
+    if path == "../data/train_audio/mallar3/XC501149.ogg":
+        path = "../data/train_audio/gnwtea/XC501149.ogg"
     samples = labels_df.loc[path]
     nb_chunks = int(np.ceil(samples["seconds"].max() / duration))
     # TODO: for validation, pick chunk with highest bird probability
