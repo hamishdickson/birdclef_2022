@@ -48,7 +48,7 @@ class OneOf(Compose):
     def __call__(self, y: np.ndarray, sr):
         data = y
         if self.transforms_ps and (np.random.random() < self.p):
-            random_state = np.random.RandomState(np.random.randint(0, 2**32 - 1))
+            random_state = np.random.RandomState(np.random.randint(0, 2 ** 32 - 1))
             t = random_state.choice(self.transforms, p=self.transforms_ps)
             data = t(y, sr)
         return data
@@ -95,11 +95,11 @@ class GaussianNoise(AudioTransform):
 
     def apply(self, y: np.ndarray, **params):
         snr = np.random.uniform(self.min_snr, self.max_snr)
-        a_signal = np.sqrt(y**2).max()
+        a_signal = np.sqrt(y ** 2).max()
         a_noise = a_signal / (10 ** (snr / 20))
 
         white_noise = np.random.randn(len(y))
-        a_white = np.sqrt(white_noise**2).max()
+        a_white = np.sqrt(white_noise ** 2).max()
         augmented = (y + white_noise * 1 / a_white * a_noise).astype(y.dtype)
         return augmented
 
@@ -113,11 +113,11 @@ class PinkNoise(AudioTransform):
 
     def apply(self, y: np.ndarray, **params):
         snr = np.random.uniform(self.min_snr, self.max_snr)
-        a_signal = np.sqrt(y**2).max()
+        a_signal = np.sqrt(y ** 2).max()
         a_noise = a_signal / (10 ** (snr / 20))
 
         pink_noise = cn.powerlaw_psd_gaussian(1, len(y))
-        a_pink = np.sqrt(pink_noise**2).max()
+        a_pink = np.sqrt(pink_noise ** 2).max()
         augmented = (y + pink_noise * 1 / a_pink * a_noise).astype(y.dtype)
         return augmented
 
@@ -255,6 +255,26 @@ def cvt_audio_to_array(
     else:
         y = load_audio(path, target_sr)
         y = y[target_sr * start : target_sr * end]
+    return y
+
+
+def sample_30sec_clip(path, labels_df, duration, use_highest=False):
+    samples = labels_df.loc[path]
+    nb_chunks = int(np.ceil(samples["seconds"].max() / duration))
+    # TODO: for validation, pick chunk with highest bird probability
+    chunk_idx = np.random.randint(nb_chunks)
+    start, end = int(duration * chunk_idx), int(duration * (chunk_idx + 1))
+    return start, end
+
+
+def cvt_audio_to_array_v2(
+    path, labels_df, target_sr, duration, split_audio_root=None, use_highest=False
+):
+    start, end = sample_30sec_clip(path, labels_df, duration, use_highest)
+    new_path = osp.join(
+        split_audio_root, "/".join(path.split("/")[-2:]).replace(".ogg", f"_{str(end)}.ogg")
+    )
+    y = load_audio(new_path, target_sr)
     return y
 
 

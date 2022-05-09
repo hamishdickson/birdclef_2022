@@ -16,6 +16,7 @@ from utils.transforms import (
     crop_audio_center,
     crop_or_pad,
     cvt_audio_to_array,
+    cvt_audio_to_array_v2,
     load_audio,
 )
 
@@ -129,7 +130,7 @@ class WaveformDataset(BinaryDataset):
         is_scored = sample["is_scored"]
 
         with LOADTIMER:
-            y = cvt_audio_to_array(
+            y = cvt_audio_to_array_v2(
                 wav_path,
                 labels_df=self.labels_df,
                 target_sr=self.sr,
