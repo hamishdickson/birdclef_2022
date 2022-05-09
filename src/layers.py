@@ -102,7 +102,7 @@ class AttBlockV2(nn.Module):
         cla = self.cla(x)
         logit = torch.sum(norm_att * cla, dim=2)
         pred = logit.sigmoid()
-        return pred, logit
+        return pred, logit, cla
 
     def nonlinear_transform(self, x):
         if self.activation == "linear":

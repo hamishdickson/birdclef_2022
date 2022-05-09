@@ -13,6 +13,40 @@ from utils.general import cutmix, mixup
 from utils.transforms import mono_to_color
 
 
+def interpolate(x: torch.Tensor, ratio: int):
+    """Interpolate data in time domain. This is used to compensate the
+    resolution reduction in downsampling of a CNN.
+    Args:
+      x: (batch_size, time_steps, classes_num)
+      ratio: int, ratio to interpolate
+    Returns:
+      upsampled: (batch_size, time_steps * ratio, classes_num)
+    """
+    (batch_size, time_steps, classes_num) = x.shape
+    upsampled = x[:, :, None, :].repeat(1, 1, ratio, 1)
+    upsampled = upsampled.reshape(batch_size, time_steps * ratio, classes_num)
+    return upsampled
+
+
+def pad_framewise_output(framewise_output: torch.Tensor, frames_num: int):
+    """Pad framewise_output to the same length as input frames. The pad value
+    is the same as the value of the last frame.
+    Args:
+      framewise_output: (batch_size, frames_num, classes_num)
+      frames_num: int, number of frames to pad
+    Outputs:
+      output: (batch_size, frames_num, classes_num)
+    """
+
+    output = F.interpolate(
+        framewise_output.unsqueeze(1),
+        size=(frames_num, framewise_output.size(2)),
+        align_corners=True,
+        mode="bilinear",
+    ).squeeze(1)
+    return output
+
+
 class TimmSED(nn.Module):
     def __init__(self, base_model_name: str, cfg, pretrained=False, num_classes=24):
         super().__init__()
@@ -34,7 +68,9 @@ class TimmSED(nn.Module):
 
         self.bn0 = nn.BatchNorm2d(self.cfg.n_mels)
 
-        self.encoder = timm.create_model(base_model_name, pretrained=pretrained)
+        self.encoder = timm.create_model(
+            base_model_name, in_chans=self.cfg.in_chans, pretrained=pretrained
+        )
 
         if hasattr(self.encoder, "fc"):
             in_features = self.encoder.fc.in_features
@@ -55,14 +91,22 @@ class TimmSED(nn.Module):
         init_bn(self.bn0)
         init_layer(self.fc1)
 
-    def forward(self, x, targets=None, do_mixup=False, weights=None):
+    def forward(self, waveform, targets=None, do_mixup=False, weights=None):
         # (batch_size, len_audio)
         with autocast(enabled=False):
             with torch.no_grad():
-                x = self.compute_melspec(x)
-                x = mono_to_color(x).transpose(1, 3)  # (batch_size, 3, time_steps, mel_bins)
-                x = x - self.cfg.mean
-                x = x / self.cfg.std
+                x = self.compute_melspec(waveform)
+                frames_num = x.shape[2]
+                if self.cfg.in_chans == 3:
+                    x = mono_to_color(x).transpose(1, 3)  # (batch_size, 3, time_steps, mel_bins)
+                    x = x - self.cfg.mean
+                    x = x / self.cfg.std
+                else:
+                    x = x.unsqueeze(1).transpose(2, 3)
+                    _min, _max = x.amin(dim=(1, 2, 3), keepdim=True), x.amax(
+                        dim=(1, 2, 3), keepdim=True
+                    )
+                    x = (x - _min) / (_max - _min)
 
                 if self.training and do_mixup:
                     if np.random.rand() < 0.5:
@@ -93,7 +137,14 @@ class TimmSED(nn.Module):
         x = x.transpose(1, 2)
         x = F.dropout(x, p=self.cfg.dropout, training=self.training)
 
-        clipwise_output, logit = self.att_block(x)
+        # Extract segmentwise and framewise
+        # clipwise_output, logit, segmentwise_logit = self.att_block(x)
+        # segmentwise_logit = segmentwise_logit.transpose(1, 2)
+        # interpolate_ratio = frames_num // segmentwise_logit.size(1)
+        # framewise_logit = interpolate(segmentwise_logit, interpolate_ratio)
+        # framewise_logit = pad_framewise_output(framewise_logit, frames_num)
+
+        clipwise_output, logit, _ = self.att_block(x)
 
         output_dict = {
             "clipwise_output": clipwise_output,  # (n_samples, n_class)
