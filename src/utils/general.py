@@ -1,6 +1,9 @@
+import logging
 import os
 import random
 import time
+from contextlib import contextmanager
+from typing import Optional
 
 import numpy as np
 import torch
@@ -38,6 +41,47 @@ def set_seed(seed=42):
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = False
     torch.backends.cudnn.benchmark = True
+
+
+def get_logger(out_file=None):
+    logger = logging.getLogger()
+    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    logger.handlers = []
+    logger.setLevel(logging.INFO)
+
+    handler = logging.StreamHandler()
+    handler.setFormatter(formatter)
+    handler.setLevel(logging.INFO)
+    logger.addHandler(handler)
+
+    if out_file is not None:
+        fh = logging.FileHandler(out_file)
+        fh.setFormatter(formatter)
+        fh.setLevel(logging.INFO)
+        logger.addHandler(fh)
+    logger.info("logger set up")
+    return logger
+
+
+@contextmanager
+def timer(name: str, logger: Optional[logging.Logger] = None):
+    t0 = time.time()
+    msg = f"[{name}] start"
+    if logger is None:
+        print(msg)
+    else:
+        logger.info(msg)
+    yield
+
+    msg = f"[{name}] done in {time.time() - t0:.2f} s"
+    if logger is None:
+        print(msg)
+    else:
+        logger.info(msg)
+
+
+def get_device() -> torch.device:
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def rand_bbox(size, lam):
