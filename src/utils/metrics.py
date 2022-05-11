@@ -1,6 +1,7 @@
 import numpy as np
 from configs.multicls import CFG
 from sklearn import metrics
+from tqdm import tqdm
 
 
 def cmp_competition_metric(y_true, y_pred, scored_classes=None):
@@ -25,7 +26,6 @@ def cmp_competition_metric(y_true, y_pred, scored_classes=None):
         gt_i = y_true[:, i]
 
         if gt_i.astype(int).mean() == 0:
-            # print(f"Skipping class {i}")
             continue
 
         pos_score = match_i[gt_i].mean()
@@ -54,8 +54,10 @@ class AverageMeter(object):
 
 
 class MetricMeter(object):
-    def __init__(self):
+    def __init__(self, optimise_per_bird=False, ranges=np.arange(0.025, 0.325, 0.025)):
         self.reset()
+        self._optimise_per_bird = optimise_per_bird
+        self._ranges = ranges
 
     def reset(self):
         self.y_true = []
@@ -65,26 +67,49 @@ class MetricMeter(object):
         self.y_true.extend(y_true.cpu().detach().numpy().tolist())
         self.y_pred.extend(y_pred.cpu().detach().numpy().tolist())
 
-    @staticmethod
-    def score(y_true, y_pred, ranges=np.arange(0.025, 0.325, 0.025), scored_birds=None):
-        scores = [
-            cmp_competition_metric(
-                np.array(y_true), np.array(y_pred) > x, scored_classes=scored_birds
-            )
-            for x in ranges
-        ]
-        best = np.argmax(scores)
-        return {
-            "f1_at_best": (ranges[best], scores[best]),
-        }
+    def score(self, y_true, y_pred, scored_birds=None, optim=False):
+        if optim:
+            best_ths = {}
+            best_scores = {}
+            print("Optimising threshold per bird...")
+            for k in tqdm(range(len(CFG.target_columns))):
+                bird = CFG.target_columns[k]
+                if scored_birds is not None and k not in scored_birds:
+                    continue
+                scores_k = [
+                    cmp_competition_metric(
+                        np.array(y_true)[:, k, None], np.array(y_pred)[:, k, None] > x
+                    )
+                    for x in self._ranges
+                ]
+                best_k = np.argmax(scores_k)
+                best_ths[bird] = self._ranges[best_k]
+                best_scores[bird] = scores_k[best_k]
+            return {
+                "best_ths_per_bird": best_ths,
+                "best_score_per_bird": best_scores,
+                "optimised_global_score": np.mean(list(best_scores.values())),
+            }
+        else:
+            scores = [
+                cmp_competition_metric(
+                    np.array(y_true), np.array(y_pred) > x, scored_classes=scored_birds
+                )
+                for x in self._ranges
+            ]
+            best = np.argmax(scores)
+            return {
+                "f1_at_best": (self._ranges[best], scores[best]),
+            }
 
     @property
     def avg(self):
-        scores = self.score(self.y_true, self.y_pred)
+        scores = self.score(self.y_true, self.y_pred, optim=False)
         scores_masked = self.score(
             self.y_true,
             self.y_pred,
             scored_birds=[CFG.target_columns.index(x) for x in CFG.scored_birds],
+            optim=self._optimise_per_bird,
         )
         scores.update({f"masked_{k}": v for k, v in scores_masked.items()})
         return scores

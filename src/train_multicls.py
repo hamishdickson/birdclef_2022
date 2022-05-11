@@ -74,7 +74,7 @@ def create_df():
     return df, labels_df
 
 
-if __name__ == "__main__":
+def train_fold():
     set_seed(
         CFG.seed + CFG.fold
     )  # make sure each fold has different seed set, dataset split seed set separately
@@ -92,4 +92,27 @@ if __name__ == "__main__":
         val_df, labels_df, "val", CFG.valid_bs, CFG.nb_workers, shuffle=False
     )
 
-    Trainer(CFG, device=device).train(train_dataloader, valid_dataloader)
+    return Trainer(CFG, device=device).train(train_dataloader, valid_dataloader)
+
+
+if __name__ == "__main__":
+    from argparse import ArgumentParser
+
+    from eval_multicls import eval_kfold
+
+    parser = ArgumentParser()
+    parser.add_argument("--multi_fold", action="store_true")
+    parser.add_argument("--nb_folds", type=int, default=5)
+    args = parser.parse_args()
+
+    if args.multi_fold:
+        folds = range(args.nb_folds)
+
+        model_paths = {}
+        for fold in folds:
+            CFG.fold = fold
+            model_paths[fold] = train_fold()[0]
+        eval_kfold(model_paths)
+
+    else:
+        train_fold()

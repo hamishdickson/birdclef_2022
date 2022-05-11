@@ -214,7 +214,8 @@ class CosineVolume(AudioTransform):
 
 def load_audio(path, target_sr, rest_type="kaiser_fast"):
     y, sr = sf.read(path, always_2d=True)
-    y = np.mean(y, 1)  # there is (X, 2) array
+    # y = np.mean(y, 1)  # there is (X, 2) array
+    y = y[:, 0]
 
     if sr != target_sr:
         y = librosa.resample(y, orig_sr=sr, target_sr=target_sr, res_type=rest_type)
@@ -308,15 +309,17 @@ def mono_to_color(X, eps=1e-6):
     Returns:
         numpy array [3 x H x W] -- RGB numpy array
     """
+    X = X.float()
     X = torch.stack([X, X, X], axis=-1)
 
     # Normalize to [0, 255]
-    _min, _max = X.min(), X.max()
+    _min, _max = X.amin(dim=(1, 2, 3), keepdims=True), X.amax(dim=(1, 2, 3), keepdims=True)
 
-    if (_max - _min) > eps:
-        X = (X - _min) / (_max - _min)
-        X = X.float()
-    else:
-        X = torch.zeros_like(X, dtype=torch.float32)
+    X = (X - _min) / (_max - _min + eps)
 
     return X
+
+
+def blend_audio(audio1, audio2, alpha=(0.1, 0.5)):
+    alpha = (np.random.random() * (alpha[1] - alpha[0])) + alpha[0]
+    return audio1 * (1 - alpha) + audio2 * alpha
