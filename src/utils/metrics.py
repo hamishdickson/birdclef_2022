@@ -1,6 +1,6 @@
 import numpy as np
-from configs.multicls import CFG
-from sklearn import metrics
+
+from ..configs.multicls import CFG
 
 
 def cmp_competition_metric(y_true, y_pred, scored_classes=None):
