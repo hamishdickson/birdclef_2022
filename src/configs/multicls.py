@@ -15,7 +15,7 @@ class CFG:
     )  # making sure we use the same split
     train_labels = "/media/nvme/Datasets/bird/2022/audio_images5/train_soundscapes.csv"
 
-    seed = 1
+    seed = 71
     epochs = 23
     cutmix_and_mixup_epochs = 18
     fold = 0  # [0, 1, 2, 3, 4]

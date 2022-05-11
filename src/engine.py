@@ -43,10 +43,13 @@ def train_fn(model, data_loader, device, optimizer, scheduler, do_mixup=False, u
     return scores.avg, losses.avg
 
 
-def valid_fn(model, data_loader, device):
+def valid_fn(model, data_loader, device, loss_meter=None, score_meter=None):
+    if loss_meter is None:
+        loss_meter = AverageMeter()
+    if score_meter is None:
+        score_meter = MetricMeter()
+
     model.eval()
-    losses = AverageMeter()
-    scores = MetricMeter()
     tk0 = tqdm(data_loader, total=len(data_loader))
     with torch.no_grad():
         for data in tk0:
@@ -54,10 +57,10 @@ def valid_fn(model, data_loader, device):
             targets = data["targets"].to(device)
             outputs = model(inputs)
             loss = loss_fn(outputs["logit"], targets)
-            losses.update(loss.item(), inputs.size(0))
-            scores.update(targets, outputs["clipwise_output"], mask=data.get("is_scored"))
-            tk0.set_postfix(loss=losses.avg)
-    return scores.avg, losses.avg
+            loss_meter.update(loss.item(), inputs.size(0))
+            score_meter.update(targets, outputs["clipwise_output"], mask=data.get("is_scored"))
+            tk0.set_postfix(loss=loss_meter.avg)
+    return score_meter, loss_meter
 
 
 class Trainer:
@@ -129,6 +132,8 @@ class Trainer:
             )
 
             valid_avg, valid_loss = valid_fn(model, valid_dataloader, self.device)
+            valid_loss = valid_loss.avg
+            valid_avg = valid_avg.avg
 
             elapsed = time.time() - start_time
 
@@ -158,3 +163,4 @@ class Trainer:
                     save_path.unlink()  # removes older checkpoints
                 best_score = new_best
                 save_path = new_save_path
+        return save_path, best_score

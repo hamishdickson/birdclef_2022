@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import torch
 
+from utils.binary_utils import create_binary_df
 from utils.general import AUGTIMER, LOADTIMER
 from utils.transforms import (
     Compose,
@@ -11,6 +12,7 @@ from utils.transforms import (
     OneOf,
     PinkNoise,
     RandomVolume,
+    blend_audio,
     crop_audio_center,
     crop_or_pad,
     cvt_audio_to_array,
@@ -100,11 +102,23 @@ class WaveformDataset(BinaryDataset):
         target_columns: list,
         mode="train",
         split_audio_root=None,
+        label_smoothing=0.0,
+        bg_blend_chance=0.0,
+        bg_blend_alpha=(0.3, 0.6),
     ):
         super().__init__(df, sr, duration, mode=mode)
         self.labels_df = labels_df
         self.target_columns = target_columns
         self.split_audio_root = split_audio_root
+        self.label_smoothing = label_smoothing if mode == "train" else 0.0
+        self.bg_blend_chance = bg_blend_chance
+        self.bg_blend_alpha = bg_blend_alpha
+        self._loaded_audio = None
+        if self.mode == "train" and self.bg_blend_chance > 0:
+            print("Creating binary df for augmentations...")
+            self.binary_df = create_binary_df()[0]
+            self.binary_df = self.binary_df[self.binary_df.label == 0]
+            print(f"Removed positive labels from binary df, new shape {len(self.binary_df)}")
 
     def __getitem__(self, idx: int):
         sample = self.df.loc[idx, :]
@@ -137,11 +151,31 @@ class WaveformDataset(BinaryDataset):
             probs=None,
         )
         #         print("after croppad: ", y.shape)
+
+        if self.mode == "train" and np.random.random() < self.bg_blend_chance:
+            bin_path = self.binary_df.sample(n=1).iloc[0]["filepath"]
+
+            # Load from cache
+            bin_y = load_audio(bin_path, target_sr=self.sr)
+            bin_y = crop_or_pad(
+                bin_y,
+                self.duration * self.sr,
+                sr=self.sr,
+                train=self.mode == "train",
+                probs=None,
+            )
+            # import soundfile as sf
+
+            # name = f"{str(np.random.random())}.wav"
+            # sf.write(name, y, samplerate=self.sr)
+            y = blend_audio(y, bin_y, alpha=self.bg_blend_alpha)
+            # sf.write(name.replace(".wav", "_bend.wav"), y, samplerate=self.sr)
+
         y = torch.from_numpy(y).float()
 
-        targets = np.zeros(len(self.target_columns), dtype=float)
+        targets = np.ones(len(self.target_columns), dtype=float) * self.label_smoothing
         for ebird_code in labels.split():
-            targets[self.target_columns.index(ebird_code)] = 1.0
+            targets[self.target_columns.index(ebird_code)] = 1.0 - self.label_smoothing
 
         return {
             "audio": y,
