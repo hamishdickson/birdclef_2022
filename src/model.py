@@ -7,10 +7,10 @@ from torch.cuda.amp import autocast
 from torchaudio.transforms import AmplitudeToDB, MelSpectrogram
 from torchlibrosa.augmentation import SpecAugmentation
 
-from layers import AttBlockV2, init_bn, init_layer
-from loss import loss_fn, mixup_criterion
-from utils.general import cutmix, mixup
-from utils.transforms import mono_to_color
+from .layers import AttBlockV2, init_bn, init_layer
+from .loss import loss_fn, mixup_criterion
+from .utils.general import cutmix, mixup
+from .utils.transforms import mono_to_color
 
 
 def interpolate(x: torch.Tensor, ratio: int):

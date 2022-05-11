@@ -6,10 +6,10 @@ import pandas as pd
 import torch
 from sklearn.model_selection import StratifiedKFold
 
-from configs.multicls import CFG
-from dataset import WaveformDataset
-from engine import Trainer
-from utils.general import set_seed
+from src.configs.multicls import CFG
+from src.dataset import WaveformDataset
+from src.engine import Trainer
+from src.utils.general import set_seed
 
 
 def create_dataset(df, labels_df, mode, batch_size, nb_workers, shuffle):

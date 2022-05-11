@@ -2,8 +2,8 @@ import numpy as np
 import pandas as pd
 import torch
 
-from utils.general import AUGTIMER, LOADTIMER
-from utils.transforms import (
+from .utils.general import AUGTIMER, LOADTIMER
+from .utils.transforms import (
     Compose,
     GaussianNoise,
     NoiseInjection,
