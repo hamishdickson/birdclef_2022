@@ -2,6 +2,7 @@ import ast
 import glob
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import torch
 from sklearn.model_selection import StratifiedKFold
@@ -21,13 +22,28 @@ def create_dataset(df, labels_df, mode, batch_size, nb_workers, shuffle):
         target_columns=CFG.target_columns,
         mode=mode,
         split_audio_root=CFG.split_audios_path,
+        label_smoothing=CFG.label_smoothing,
+        bg_blend_chance=CFG.bg_blend_chance,
+        bg_blend_alpha=CFG.bg_blend_alpha,
     )
+
+    if shuffle:
+        counts = df.primary_label.value_counts().to_dict()
+        weights = df.primary_label.apply(lambda x: 1 / np.log1p(counts[x])).values
+
     dataloader = torch.utils.data.DataLoader(
         dataset,
         batch_size=batch_size,
         num_workers=nb_workers,
         pin_memory=True,
-        shuffle=shuffle,
+        shuffle=None if shuffle else False,
+        sampler=torch.utils.data.sampler.WeightedRandomSampler(
+            weights=weights,
+            num_samples=len(dataset),
+            replacement=True,
+        )
+        if shuffle
+        else None,
     )
     return dataset, dataloader
 
