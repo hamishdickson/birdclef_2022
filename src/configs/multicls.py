@@ -5,7 +5,7 @@ import torch
 
 
 class CFG:
-    exp_name = "weight1-alpha05-seed1"  # this goes to the save filename
+    exp_name = "fixed_norm_first_channel_drop5_blend_chance80_alpha30-60_sampler"  # this goes to the save filename
     output_dir = "../exp/multiclass/"
 
     audios_path = "/media/nvme/Datasets/bird/2022/train_audio/*/*.ogg"
@@ -23,12 +23,17 @@ class CFG:
     N_FOLDS = 5
     LR = 2 * 1e-3
     ETA_MIN = 1e-6
+
     WEIGHT_DECAY = 1e-6
     mixup_alpha = 0.4
     scored_weight = 1
+    label_smoothing = 0.0
+    bg_blend_chance = 0.8
+    bg_blend_alpha = (0.3, 0.6)
+
     train_bs = 32  # 32
     valid_bs = 32  # 64
-    base_model_name = "tf_efficientnet_b3_ns"
+    base_model_name = "tf_efficientnet_b5_ns"
     starting_weights = None  # "fold-0-b3-779.bin"
     load_up_to_layer = None  # 1
     apex = True

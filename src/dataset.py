@@ -103,7 +103,7 @@ class WaveformDataset(BinaryDataset):
         mode="train",
         split_audio_root=None,
         label_smoothing=0.0,
-        bg_blend_chance=0.0,
+        bg_blend_chance=0.8,
         bg_blend_alpha=(0.3, 0.6),
     ):
         super().__init__(df, sr, duration, mode=mode)
