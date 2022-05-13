@@ -12,6 +12,8 @@ from loss import loss_fn
 from model import TimmSED
 from utils.metrics import AverageMeter, MetricMeter
 
+from torch.utils.tensorboard import SummaryWriter
+
 
 def train_fn(model, data_loader, device, optimizer, scheduler, do_mixup=False, use_apex=True):
     model.train()
@@ -74,6 +76,8 @@ class Trainer:
 
     def train(self, train_dataloader, valid_dataloader):
         print(f"Fold {self.cfg.fold} Training")
+
+        writer = SummaryWriter()
 
         model = TimmSED(
             cfg=self.cfg,
@@ -151,6 +155,7 @@ class Trainer:
                     )
 
             new_best = valid_avg.get("masked_f1_at_best", valid_avg["f1_at_best"])[1]
+            writer.add_scalar("valid/best", new_best, epoch)
             if new_best > best_score:
                 self._output_dir.mkdir(exist_ok=True, parents=True)
                 new_save_path = (

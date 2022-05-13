@@ -8,12 +8,13 @@ class CFG:
     exp_name = "fixed_norm_first_channel_drop5_blend_chance80_alpha30-60_sampler"  # this goes to the save filename
     output_dir = "../exp/multiclass/"
 
-    audios_path = "/media/nvme/Datasets/bird/2022/train_audio/*/*.ogg"
-    split_audios_path = "/media/nvme/Datasets/bird/2022/train_np/"
-    train_metadata = str(
-        Path(__file__).parent / "../../data/train_metadata.csv"
-    )  # making sure we use the same split
-    train_labels = "/media/nvme/Datasets/bird/2022/audio_images5/train_soundscapes.csv"
+    audios_path = "/mnt/datastore/birdclef_2022/input/train_audio/*/*.ogg" #  "/media/nvme/Datasets/bird/2022/train_audio/*/*.ogg"
+    split_audios_path = "/mnt/datastore/birdclef_2022/train_np/" #"/media/nvme/Datasets/bird/2022/train_np/"
+    train_metadata = "data/train_metadata.csv" 
+    # str(
+    #     Path(__file__).parent / "data/train_metadata.csv"
+    # )  # making sure we use the same split
+    train_labels = "/mnt/datastore/birdclef_2022/input/train_soundscapes.csv" # "/media/nvme/Datasets/bird/2022/audio_images5/train_soundscapes.csv"
 
     seed = 71
     epochs = 23
