@@ -1,10 +1,8 @@
-import imp
 import time
 from pathlib import Path
 
 import numpy as np
 import torch
-import transformers
 from torch.cuda.amp import GradScaler, autocast
 from tqdm import tqdm
 
@@ -102,13 +100,41 @@ class Trainer:
             print(f"Loaded weights from {self.cfg.starting_weights}")
             print(loaded_keys)
 
-        optimizer = transformers.AdamW(
-            model.parameters(), lr=self.cfg.LR, weight_decay=self.cfg.WEIGHT_DECAY
+        params = []
+        no_wd = []
+        lr = self.cfg.LR * self.cfg.train_bs / 32
+        for n, m in model.named_modules():
+            if isinstance(
+                m,
+                (
+                    torch.nn.BatchNorm1d,
+                    torch.nn.BatchNorm2d,
+                    torch.nn.LayerNorm,
+                    torch.nn.GroupNorm,
+                ),
+            ):
+                no_wd.append(n)
+        for key, value in model.named_parameters():
+            if not value.requires_grad:
+                continue
+            weight_decay = self.cfg.WEIGHT_DECAY
+            if "bias" in key:
+                weight_decay = 0.0
+            if any([key.startswith(no_wd_key) for no_wd_key in no_wd]):
+                weight_decay = 0.0
+            if "gain" in key or "skipinit_gain" in key:
+                weight_decay = 0.0
+            if "pos_embed" in key or "cls_token" in key or "dist_token" in key:
+                weight_decay = 0.0
+            if "relative_position_bias_table" in key:
+                weight_decay = 0.0
+            params += [{"params": [value], "lr": lr, "weight_decay": weight_decay}]
+        optimizer = torch.optim.AdamW(params, eps=1e-6)
+        cosine_sched_T_max = (
+            len(train_dataloader.dataset) / self.cfg.train_bs * self.cfg.cutmix_and_mixup_epochs
         )
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer,
-            eta_min=self.cfg.ETA_MIN,
-            T_max=len(train_dataloader.dataset) / self.cfg.train_bs * 18,
+            optimizer, eta_min=self.cfg.ETA_MIN, T_max=cosine_sched_T_max
         )
 
         model = model.to(self.device)
@@ -138,7 +164,9 @@ class Trainer:
             elapsed = time.time() - start_time
 
             print(
-                f"Epoch {epoch + 1} - avg_train_loss: {train_loss:.5f}  avg_val_loss: {valid_loss:.5f}  time: {elapsed:.0f}s"
+                f"Epoch {epoch + 1} - avg_train_loss: {train_loss:.5f}"
+                f" avg_val_loss: {valid_loss:.5f}  time: {elapsed:.0f}s"
+                f" lr: {optimizer.param_groups[0]['lr']}"
             )
             for key in valid_avg.keys():
                 if "best" in key:
