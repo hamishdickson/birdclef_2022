@@ -2,14 +2,17 @@ import ast
 import glob
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import torch
 from sklearn.model_selection import StratifiedKFold
 
 from src.configs.multicls import CFG
 from src.dataset import WaveformDataset
-from src.engine import Trainer
+from src.engine import Trainer, valid_fn
+from src.model import TimmSED
 from src.utils.general import set_seed
+from src.utils.metrics import MetricMeter
 
 
 def create_dataset(df, labels_df, mode, batch_size, nb_workers, shuffle):
@@ -21,6 +24,7 @@ def create_dataset(df, labels_df, mode, batch_size, nb_workers, shuffle):
         target_columns=CFG.target_columns,
         mode=mode,
         split_audio_root=CFG.split_audios_path,
+        bg_blend_chance=CFG.bg_blend_chance,
     )
     dataloader = torch.utils.data.DataLoader(
         dataset,
@@ -95,15 +99,53 @@ def train_fold():
     return Trainer(CFG, device=device).train(train_dataloader, valid_dataloader)
 
 
+def eval_kfold(model_paths):
+    df, labels_df = create_df()
+    score = MetricMeter(optimise_per_bird=True, ranges=np.arange(0.01, 0.31, 0.01))
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    for fold, path in model_paths.items():
+        print(f"Processing fold {fold}...")
+        val_df = df[df.kfold == fold].reset_index(drop=True)
+
+        valid_dateset, valid_dataloader = create_dataset(
+            val_df, labels_df, "val", CFG.valid_bs, CFG.nb_workers, shuffle=False
+        )
+
+        model = TimmSED(
+            cfg=CFG,
+            base_model_name=CFG.base_model_name,
+            pretrained=CFG.pretrained,
+            num_classes=CFG.num_classes,
+        ).to(device)
+        model.load_state_dict(torch.load(path), strict=True)
+
+        score, _ = valid_fn(model, valid_dataloader, score_meter=score, device=device)
+    print(score.avg)
+
+
 if __name__ == "__main__":
     from argparse import ArgumentParser
 
-    from eval_multicls import eval_kfold
-
     parser = ArgumentParser()
-    parser.add_argument("--multi_fold", action="store_true")
-    parser.add_argument("--nb_folds", type=int, default=5)
+    parser.add_argument("--multi-fold", action="store_true")
+    parser.add_argument("--nb-folds", type=int, default=5)
+    parser.add_argument("--fold", type=int, default=0)
+    parser.add_argument("--exp-name", type=str, default="", help="experiment name")
+    parser.add_argument("--nb-workers", type=int, default=8, help="number of dataloader workers")
+    parser.add_argument("--ls", type=float, default=0.0, help="label smoothing")
+    parser.add_argument("--bg-blend", type=float, default=0.0, help="add background audio")
+    parser.add_argument("--train-bs", type=int, default=16, help="train batch size")
+    parser.add_argument("--wd", type=float, default=1e-4, help="weight decay")
     args = parser.parse_args()
+    print(args)
+
+    CFG.nb_workers = args.nb_workers
+    CFG.fold = args.fold
+    CFG.exp_name = args.exp_name
+    CFG.label_smoothing = args.ls
+    CFG.bg_blend_chance = args.bg_blend
+    CFG.train_bs = args.train_bs
 
     if args.multi_fold:
         folds = range(args.nb_folds)

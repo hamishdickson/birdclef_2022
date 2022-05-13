@@ -12,8 +12,9 @@ class CFG:
     split_audios_path = "./data/train_np/"
     train_metadata = "./data/train_metadata.csv"  # making sure we use the same split
     train_labels = "./data/train_soundscapes.csv"
+    train_backgrounds = "./data/train_backgrounds.csv"
 
-    nb_workers = 8
+    nb_workers = 0
     period = 30
     n_mels = 224  # 128
     fmin = 20
@@ -24,6 +25,9 @@ class CFG:
     in_chans = 1
 
     seed = 71
+    label_smoothing = 0.0
+    bg_blend_chance = (0.0,)
+    bg_blend_alpha = (0.3, 0.6)
     epochs = 23
     cutmix_and_mixup_epochs = 18
     fold = 0  # [0, 1, 2, 3, 4]
