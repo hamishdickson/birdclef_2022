@@ -7,10 +7,12 @@ from torch.cuda.amp import autocast
 from torchaudio.transforms import AmplitudeToDB, MelSpectrogram
 from torchlibrosa.augmentation import SpecAugmentation
 
+from nnAudio.features.cqt import CQT1992v2
+
 from layers import AttBlockV2, init_bn, init_layer
 from loss import loss_fn, mixup_criterion
 from utils.general import cutmix, mixup
-from utils.transforms import mono_to_color
+from utils.transforms import mono_to_color, multi_norm
 
 
 class TimmSED(nn.Module):
@@ -18,14 +20,37 @@ class TimmSED(nn.Module):
         super().__init__()
         self.cfg = cfg
 
-        self.mel_trans = MelSpectrogram(
+        self.mel_trans_power = MelSpectrogram(
             sample_rate=self.cfg.sample_rate,
             n_fft=self.cfg.n_fft,
             hop_length=self.cfg.hop_length,
             f_min=self.cfg.fmin,
             f_max=self.cfg.fmax,
             n_mels=self.cfg.n_mels,
+            power=2.0
         )
+
+        self.mel_trans_energy = MelSpectrogram(
+            sample_rate=self.cfg.sample_rate,
+            n_fft=self.cfg.n_fft,
+            hop_length=self.cfg.hop_length,
+            f_min=self.cfg.fmin,
+            f_max=self.cfg.fmax,
+            n_mels=self.cfg.n_mels,
+            power=1.0
+        )
+
+
+        self.mel_trans_energy15 = MelSpectrogram(
+            sample_rate=self.cfg.sample_rate,
+            n_fft=self.cfg.n_fft,
+            hop_length=self.cfg.hop_length,
+            f_min=self.cfg.fmin,
+            f_max=self.cfg.fmax,
+            n_mels=self.cfg.n_mels,
+            power=1.5
+        )
+
         self.amp_db_tran = AmplitudeToDB()
 
         self.spec_augmenter = SpecAugmentation(
@@ -49,7 +74,10 @@ class TimmSED(nn.Module):
         self.init_weight()
 
     def compute_melspec(self, y):
-        return self.amp_db_tran(self.mel_trans(y)).float()
+        return self.amp_db_tran(self.mel_trans_power(y)).float()
+
+    def compute_melspec_multi_channel(self, y):
+        return (self.amp_db_tran(self.mel_trans_power(y)).float(), self.amp_db_tran(self.mel_trans_energy15(y)).float(), self.amp_db_tran(self.mel_trans_energy(y)).float())
 
     def init_weight(self):
         init_bn(self.bn0)
@@ -59,8 +87,12 @@ class TimmSED(nn.Module):
         # (batch_size, len_audio)
         with autocast(enabled=False):
             with torch.no_grad():
-                x = self.compute_melspec(x)
-                x = mono_to_color(x).transpose(1, 3)  # (batch_size, 3, time_steps, mel_bins)
+                if self.cfg.multi_channel:
+                    i, j, k = self.compute_melspec_multi_channel(x)
+                    x = multi_norm(i, j, k).transpose(1, 3)  # (batch_size, 3, time_steps, mel_bins)
+                else:
+                    x = self.compute_melspec(x)
+                    x = mono_to_color(x).transpose(1, 3)  # (batch_size, 3, time_steps, mel_bins)
                 x = x - self.cfg.mean
                 x = x / self.cfg.std
 

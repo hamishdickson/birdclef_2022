@@ -92,3 +92,5 @@ class CFG:
     n_fft = 2048
     hop_length = 512
     sample_rate = 32000
+
+    multi_channel = True

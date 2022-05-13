@@ -320,6 +320,18 @@ def mono_to_color(X, eps=1e-6):
     return X
 
 
+def multi_norm(i, j, k, eps=1e-6):
+    i, j, k = i.float(), j.float(), k.float()
+    X = torch.stack([i, j, k], axis=-1)
+
+    # Normalize to [0, 255]
+    _min, _max = X.amin(dim=(1, 2, 3), keepdims=True), X.amax(dim=(1, 2, 3), keepdims=True)
+
+    X = (X - _min) / (_max - _min + eps)
+
+    return X
+
+
 def blend_audio(audio1, audio2, alpha=(0.1, 0.5)):
     alpha = (np.random.random() * (alpha[1] - alpha[0])) + alpha[0]
     return audio1 * (1 - alpha) + audio2 * alpha

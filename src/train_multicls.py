@@ -123,7 +123,8 @@ if __name__ == "__main__":
 
     if args.multi_fold:
         folds = range(args.nb_folds)
-
+        print(f"training folds {folds}")
+        
         model_paths = {}
         for fold in folds:
             CFG.fold = fold
