@@ -8,9 +8,9 @@ import transformers
 from torch.cuda.amp import GradScaler, autocast
 from tqdm import tqdm
 
-from loss import loss_fn
-from model import TimmSED
-from utils.metrics import AverageMeter, MetricMeter
+from .loss import loss_fn
+from .model import TimmSED
+from .utils.metrics import AverageMeter, MetricMeter
 
 
 def train_fn(model, data_loader, device, optimizer, scheduler, do_mixup=False, use_apex=True):

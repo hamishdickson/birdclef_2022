@@ -6,14 +6,22 @@ import torch
 
 class CFG:
     exp_name = "weight1-alpha05-seed1"  # this goes to the save filename
-    output_dir = "../exp/multiclass/"
+    output_dir = "exp/multiclass/"
 
-    audios_path = "/media/nvme/Datasets/bird/2022/train_audio/*/*.ogg"
-    split_audios_path = "/media/nvme/Datasets/bird/2022/train_np/"
-    train_metadata = str(
-        Path(__file__).parent / "../../data/train_metadata.csv"
-    )  # making sure we use the same split
-    train_labels = "/media/nvme/Datasets/bird/2022/audio_images5/train_soundscapes.csv"
+    audios_path = "./data/train_audio/*/*.ogg"
+    split_audios_path = "./data/train_np/"
+    train_metadata = "./data/train_metadata.csv"  # making sure we use the same split
+    train_labels = "./data/train_soundscapes.csv"
+
+    nb_workers = 8
+    period = 30
+    n_mels = 224  # 128
+    fmin = 20
+    fmax = 16000
+    n_fft = 2048
+    hop_length = 512
+    sample_rate = 32000
+    in_chans = 1
 
     seed = 71
     epochs = 23
@@ -26,19 +34,19 @@ class CFG:
     WEIGHT_DECAY = 1e-6
     mixup_alpha = 0.4
     scored_weight = 1
-    train_bs = 32  # 32
-    valid_bs = 32  # 64
+    train_bs = 16  # 32
+    valid_bs = 16  # 64
     base_model_name = "tf_efficientnet_b3_ns"
     starting_weights = None  # "fold-0-b3-779.bin"
     load_up_to_layer = None  # 1
     apex = True
-    nb_workers = 6
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     mean = (
-        torch.from_numpy(np.array([0.485, 0.456, 0.406])).float()[None, :, None, None].cuda()
+        torch.from_numpy(np.array([0.485, 0.456, 0.406])).float()[None, :, None, None].to(device)
     )  # RGB
     std = (
-        torch.from_numpy(np.array([0.229, 0.224, 0.225])).float()[None, :, None, None].cuda()
+        torch.from_numpy(np.array([0.229, 0.224, 0.225])).float()[None, :, None, None].to(device)
     )  # RG
 
     pretrained = True
@@ -79,10 +87,3 @@ class CFG:
         "warwhe1",
         "yefcan",
     ]
-    period = 5
-    n_mels = 224  # 128
-    fmin = 20
-    fmax = 16000
-    n_fft = 2048
-    hop_length = 512
-    sample_rate = 32000
