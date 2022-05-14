@@ -30,8 +30,10 @@ class CFG:
     bg_blend_alpha = (0.3, 0.6)
     epochs = 23
     cutmix_and_mixup_epochs = 18
+    warmup_epochs = 3
     fold = 0  # [0, 1, 2, 3, 4]
     dropout = 0.5
+    grad_acc_steps = 1
     N_FOLDS = 5
     LR = 2 * 1e-3
     ETA_MIN = 1e-6

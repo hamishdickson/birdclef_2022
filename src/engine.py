@@ -5,20 +5,23 @@ import numpy as np
 import torch
 from torch.cuda.amp import GradScaler, autocast
 from tqdm import tqdm
+from transformers.optimization import get_cosine_schedule_with_warmup
 
 from .loss import loss_fn
 from .model import TimmSED
 from .utils.metrics import AverageMeter, MetricMeter
 
 
-def train_fn(model, data_loader, device, optimizer, scheduler, do_mixup=False, use_apex=True):
+def train_fn(
+    model, data_loader, device, optimizer, scheduler, do_mixup=False, use_apex=True, gd_steps=1
+):
     model.train()
     scaler = GradScaler(enabled=use_apex)
     losses = AverageMeter()
     scores = MetricMeter()
     tk0 = tqdm(data_loader, total=len(data_loader))
 
-    for data in tk0:
+    for i, data in enumerate(tk0):
         optimizer.zero_grad()
         inputs = data["audio"].to(device)
         targets = data["targets"].to(device)
@@ -29,15 +32,17 @@ def train_fn(model, data_loader, device, optimizer, scheduler, do_mixup=False, u
         with autocast(enabled=use_apex):
             outputs = model(inputs, targets=targets, do_mixup=do_mixup, weights=weights)
             loss = outputs["loss"]
-
+        # gradient accumulation
+        loss = loss / gd_steps
         scaler.scale(loss).backward()
-        scaler.step(optimizer)
-        scaler.update()
-
-        scheduler.step()
+        if (i + 1) % gd_steps == 0:
+            scaler.step(optimizer)
+            scaler.update()
+            optimizer.zero_grad()
+            scheduler.step()
         losses.update(loss.item(), inputs.size(0))
         scores.update(targets, outputs["clipwise_output"], mask=data.get("is_scored"))
-        tk0.set_postfix(loss=losses.avg)
+        tk0.set_postfix(loss=losses.avg, lr=optimizer.param_groups[0]["lr"])
     return scores.avg, losses.avg
 
 
@@ -65,10 +70,7 @@ class Trainer:
     def __init__(self, cfg, device="cuda"):
         self.cfg = cfg
         self.device = device
-        self._output_dir = (
-            Path(self.cfg.output_dir)
-            / f"{time.strftime('%D-%T').replace('/', '-')}-{self.cfg.exp_name}"
-        )
+        self._output_dir = Path(self.cfg.output_dir) / f"{self.cfg.exp_name}"
 
     def train(self, train_dataloader, valid_dataloader):
         print(f"Fold {self.cfg.fold} Training")
@@ -130,11 +132,15 @@ class Trainer:
                 weight_decay = 0.0
             params += [{"params": [value], "lr": lr, "weight_decay": weight_decay}]
         optimizer = torch.optim.AdamW(params, eps=1e-6)
-        cosine_sched_T_max = (
-            len(train_dataloader.dataset) / self.cfg.train_bs * self.cfg.cutmix_and_mixup_epochs
-        )
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, eta_min=self.cfg.ETA_MIN, T_max=cosine_sched_T_max
+
+        num_epochs = self.cfg.epochs
+        num_warmup_epochs = self.cfg.warmup_epochs
+        grad_acc_steps = self.cfg.grad_acc_steps
+        num_training_batches = len(train_dataloader)
+        num_training_steps = (num_epochs * num_training_batches) // grad_acc_steps
+        num_warmup_steps = (num_warmup_epochs * num_training_batches) // grad_acc_steps
+        scheduler = get_cosine_schedule_with_warmup(
+            optimizer, num_warmup_steps, num_training_steps
         )
 
         model = model.to(self.device)
@@ -155,6 +161,7 @@ class Trainer:
                 scheduler,
                 do_mixup=epoch < self.cfg.cutmix_and_mixup_epochs,
                 use_apex=self.cfg.apex,
+                gd_steps=grad_acc_steps,
             )
 
             valid_avg, valid_loss = valid_fn(model, valid_dataloader, self.device)

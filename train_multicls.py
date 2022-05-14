@@ -136,7 +136,9 @@ if __name__ == "__main__":
     parser.add_argument("--ls", type=float, default=0.0, help="label smoothing")
     parser.add_argument("--bg-blend", type=float, default=0.0, help="add background audio")
     parser.add_argument("--train-bs", type=int, default=16, help="train batch size")
+    parser.add_argument("--gd", type=int, default=1, help="gradient accumulation steps")
     parser.add_argument("--wd", type=float, default=1e-4, help="weight decay")
+    parser.add_argument("--base-model", type=str, help="timm backbone")
     args = parser.parse_args()
     print(args)
 
@@ -146,6 +148,8 @@ if __name__ == "__main__":
     CFG.label_smoothing = args.ls
     CFG.bg_blend_chance = args.bg_blend
     CFG.train_bs = args.train_bs
+    CFG.grad_acc_steps = args.gd
+    CFG.base_model_name = args.base_model
 
     if args.multi_fold:
         folds = range(args.nb_folds)
