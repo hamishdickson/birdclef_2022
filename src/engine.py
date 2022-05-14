@@ -104,7 +104,7 @@ class Trainer:
 
         params = []
         no_wd = []
-        lr = self.cfg.LR * self.cfg.train_bs / 32
+        lr = self.cfg.LR * self.cfg.train_bs * self.cfg.grad_acc_steps / 32
         for n, m in model.named_modules():
             if isinstance(
                 m,
