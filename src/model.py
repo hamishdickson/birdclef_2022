@@ -72,11 +72,7 @@ class TimmSED(nn.Module):
             base_model_name, in_chans=self.cfg.in_chans, pretrained=pretrained
         )
 
-        if hasattr(self.encoder, "fc"):
-            in_features = self.encoder.fc.in_features
-        else:
-            in_features = self.encoder.classifier.in_features
-
+        in_features = self.encoder.num_features
         self.encoder.reset_classifier(0, "")
 
         self.fc1 = nn.Linear(in_features, in_features, bias=True)
