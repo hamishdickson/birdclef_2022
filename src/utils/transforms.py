@@ -275,11 +275,12 @@ def sample_30sec_clip(path, labels_df, duration, use_highest=False):
 def cvt_audio_to_array_v2(
     path, labels_df, target_sr, duration, split_audio_root=None, use_highest=False
 ):
-    start, end = sample_30sec_clip(path, labels_df, duration, use_highest)
-    new_path = osp.join(
-        split_audio_root, "/".join(path.split("/")[-2:]).replace(".ogg", f"_{str(end)}.ogg")
-    )
-    y = load_audio(new_path, target_sr)
+    # start, end = sample_30sec_clip(path, labels_df, duration, use_highest)
+    # new_path = osp.join(
+    #     split_audio_root, "/".join(path.split("/")[-2:]).replace(".ogg", f"_{str(end)}.ogg")
+    # )
+    # y = load_audio(new_path, target_sr)
+    y = load_audio(path, target_sr)
     return y
 
 

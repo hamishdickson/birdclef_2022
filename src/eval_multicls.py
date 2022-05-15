@@ -1,11 +1,11 @@
 import numpy as np
 import torch
 
-from configs.multicls import CFG
-from engine import valid_fn
-from model import TimmSED
-from train_multicls import create_dataset, create_df
-from utils.metrics import MetricMeter
+from ..train_multicls import create_dataset, create_df
+from .configs.multicls import CFG
+from .engine import valid_fn
+from .model import TimmSED
+from .utils.metrics import MetricMeter
 
 
 def eval_kfold(model_paths):

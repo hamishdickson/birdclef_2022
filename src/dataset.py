@@ -116,7 +116,7 @@ class WaveformDataset(BinaryDataset):
         self._loaded_audio = None
         if self.mode == "train" and self.bg_blend_chance > 0:
             print("Creating binary df for augmentations...")
-            self.binary_df = create_binary_df()[0]
+            self.binary_df = pd.read_csv("data/train_backgrounds.csv")
             self.binary_df = self.binary_df[self.binary_df.label == 0]
             print(f"Removed positive labels from binary df, new shape {len(self.binary_df)}")
 
