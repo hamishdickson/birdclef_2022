@@ -121,10 +121,10 @@ if __name__ == "__main__":
     parser.add_argument("--nb_folds", type=int, default=5)
     args = parser.parse_args()
 
-    if args.multi_fold:
+    if True:
         folds = range(args.nb_folds)
         print(f"training folds {folds}")
-        
+
         model_paths = {}
         for fold in folds:
             CFG.fold = fold

@@ -173,7 +173,7 @@ class WaveformDataset(BinaryDataset):
 
         y = torch.from_numpy(y).float()
 
-        targets = np.ones(len(self.target_columns), dtype=float) * self.label_smoothing
+        targets = np.zeros(len(self.target_columns), dtype=float) #* self.label_smoothing
         for ebird_code in labels.split():
             targets[self.target_columns.index(ebird_code)] = 1.0 - self.label_smoothing
 

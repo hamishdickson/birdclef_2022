@@ -5,7 +5,7 @@ import torch
 
 
 class CFG:
-    exp_name = "fixed_norm_first_channel_drop5_blend_chance80_alpha30-60_sampler"  # this goes to the save filename
+    exp_name = "multichannel_power_energy_pcen"  # this goes to the save filename
     output_dir = "../exp/multiclass/"
 
     audios_path = "/mnt/datastore/birdclef_2022/input/train_audio/*/*.ogg" #  "/media/nvme/Datasets/bird/2022/train_audio/*/*.ogg"
@@ -28,7 +28,7 @@ class CFG:
     WEIGHT_DECAY = 1e-6
     mixup_alpha = 0.4
     scored_weight = 1
-    label_smoothing = 0.0
+    label_smoothing = 0.05
     bg_blend_chance = 0.8
     bg_blend_alpha = (0.3, 0.6)
 
@@ -38,7 +38,7 @@ class CFG:
     starting_weights = None  # "fold-0-b3-779.bin"
     load_up_to_layer = None  # 1
     apex = True
-    nb_workers = 6
+    nb_workers = 12
 
     mean = (
         torch.from_numpy(np.array([0.485, 0.456, 0.406])).float()[None, :, None, None].cuda()

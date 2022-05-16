@@ -4,15 +4,64 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.cuda.amp import autocast
-from torchaudio.transforms import AmplitudeToDB, MelSpectrogram
+from torchaudio.transforms import AmplitudeToDB #, MelSpectrogram
 from torchlibrosa.augmentation import SpecAugmentation
 
-from nnAudio.features.cqt import CQT1992v2
+from nnAudio.Spectrogram import MelSpectrogram
 
 from layers import AttBlockV2, init_bn, init_layer
 from loss import loss_fn, mixup_criterion
 from utils.general import cutmix, mixup
 from utils.transforms import mono_to_color, multi_norm
+
+def pcen(x, eps=1E-6, s=0.025, alpha=0.98, delta=2, r=0.5, training=False):
+    frames = x.split(1, -2)
+    m_frames = []
+    last_state = None
+    for frame in frames:
+        if last_state is None:
+            last_state = s * frame
+            m_frames.append(last_state)
+            continue
+        if training:
+            m_frame = ((1 - s) * last_state).add_(s * frame)
+        else:
+            m_frame = (1 - s) * last_state + s * frame
+        last_state = m_frame
+        m_frames.append(m_frame)
+    M = torch.cat(m_frames, 1)
+    if training:
+        pcen_ = (x / (M + eps).pow(alpha) + delta).pow(r) - delta ** r
+    else:
+        pcen_ = x.div_(M.add_(eps).pow_(alpha)).add_(delta).pow_(r).sub_(delta ** r)
+    return pcen_
+
+
+class PCENTransform(nn.Module):
+
+    def __init__(self, eps=1E-6, s=0.025, alpha=0.98, delta=2, r=0.5, trainable=True):
+        super().__init__()
+        if trainable:
+            self.log_s = nn.Parameter(torch.log(torch.Tensor([s])))
+            self.log_alpha = nn.Parameter(torch.log(torch.Tensor([alpha])))
+            self.log_delta = nn.Parameter(torch.log(torch.Tensor([delta])))
+            self.log_r = nn.Parameter(torch.log(torch.Tensor([r])))
+        else:
+            self.s = s
+            self.alpha = alpha
+            self.delta = delta
+            self.r = r
+        self.eps = eps
+        self.trainable = trainable
+
+    def forward(self, x):
+        x = x.transpose(2,1)
+        if self.trainable:
+            x = pcen(x, self.eps, torch.exp(self.log_s), torch.exp(self.log_alpha), torch.exp(self.log_delta), torch.exp(self.log_r), self.training and self.trainable)
+        else:
+            x = pcen(x, self.eps, self.s, self.alpha, self.delta, self.r, self.training and self.trainable)
+        x = x.transpose(2,1)
+        return x
 
 
 class TimmSED(nn.Module):
@@ -21,35 +70,31 @@ class TimmSED(nn.Module):
         self.cfg = cfg
 
         self.mel_trans_power = MelSpectrogram(
-            sample_rate=self.cfg.sample_rate,
+            sr=self.cfg.sample_rate,
             n_fft=self.cfg.n_fft,
             hop_length=self.cfg.hop_length,
-            f_min=self.cfg.fmin,
-            f_max=self.cfg.fmax,
+            fmin=self.cfg.fmin,
+            fmax=self.cfg.fmax,
             n_mels=self.cfg.n_mels,
-            power=2.0
+            power=2.0,
+            trainable_mel=True,
+            trainable_STFT=True
         )
 
         self.mel_trans_energy = MelSpectrogram(
-            sample_rate=self.cfg.sample_rate,
+            sr=self.cfg.sample_rate,
             n_fft=self.cfg.n_fft,
             hop_length=self.cfg.hop_length,
-            f_min=self.cfg.fmin,
-            f_max=self.cfg.fmax,
+            fmin=self.cfg.fmin,
+            fmax=self.cfg.fmax,
             n_mels=self.cfg.n_mels,
-            power=1.0
+            power=1.0,
+            trainable_mel=True,
+            trainable_STFT=True
         )
 
 
-        self.mel_trans_energy15 = MelSpectrogram(
-            sample_rate=self.cfg.sample_rate,
-            n_fft=self.cfg.n_fft,
-            hop_length=self.cfg.hop_length,
-            f_min=self.cfg.fmin,
-            f_max=self.cfg.fmax,
-            n_mels=self.cfg.n_mels,
-            power=1.5
-        )
+        # self.pcen_trans = PCENTransform(eps=1E-6, s=0.025, alpha=0.6, delta=0.1, r=0.2, trainable=True)
 
         self.amp_db_tran = AmplitudeToDB()
 
@@ -77,7 +122,7 @@ class TimmSED(nn.Module):
         return self.amp_db_tran(self.mel_trans_power(y)).float()
 
     def compute_melspec_multi_channel(self, y):
-        return (self.amp_db_tran(self.mel_trans_power(y)).float(), self.amp_db_tran(self.mel_trans_energy15(y)).float(), self.amp_db_tran(self.mel_trans_energy(y)).float())
+        return (self.amp_db_tran(self.mel_trans_power(y)).float(), self.amp_db_tran(self.mel_trans_energy(y)).float(), self.amp_db_tran(self.mel_trans_power(y)).float())
 
     def init_weight(self):
         init_bn(self.bn0)
