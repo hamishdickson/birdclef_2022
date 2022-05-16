@@ -5,7 +5,7 @@ import torch
 
 
 class CFG:
-    exp_name = "fixed_norm_first_channel_drop5_blend_chance80_alpha30-60_sampler"  # this goes to the save filename
+    exp_name = "dur20_20sval"  # this goes to the save filename
     output_dir = "../exp/multiclass/"
 
     audios_path = "/media/nvme/Datasets/bird/2022/train_audio/*/*.ogg"
@@ -13,6 +13,7 @@ class CFG:
     train_metadata = str(
         Path(__file__).parent / "../../data/train_metadata.csv"
     )  # making sure we use the same split
+    train_pseudo = str(Path(__file__).parent / "../../data/pseudo.csv")
     train_labels = "/media/nvme/Datasets/bird/2022/audio_images5/train_soundscapes.csv"
 
     seed = 71
@@ -28,12 +29,12 @@ class CFG:
     mixup_alpha = 0.4
     scored_weight = 1
     label_smoothing = 0.0
-    bg_blend_chance = 0.8
+    bg_blend_chance = 0.0
     bg_blend_alpha = (0.3, 0.6)
 
     train_bs = 32  # 32
     valid_bs = 32  # 64
-    base_model_name = "tf_efficientnet_b5_ns"
+    base_model_name = "tf_efficientnet_b0_ns"
     starting_weights = None  # "fold-0-b3-779.bin"
     load_up_to_layer = None  # 1
     apex = True
@@ -84,7 +85,7 @@ class CFG:
         "warwhe1",
         "yefcan",
     ]
-    period = 5
+    period = 20
     n_mels = 224  # 128
     fmin = 20
     fmax = 16000

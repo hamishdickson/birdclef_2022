@@ -46,6 +46,9 @@ class TimmSED(nn.Module):
         self.fc1 = nn.Linear(in_features, in_features, bias=True)
         self.att_block = AttBlockV2(in_features, num_classes, activation="sigmoid")
 
+        self.framewise_pool = nn.AdaptiveMaxPool1d(int(self.cfg.period / 5))
+        self.framewise_cls = nn.Conv1d(in_features, num_classes, kernel_size=1)
+
         self.init_weight()
 
     def compute_melspec(self, y):
@@ -55,7 +58,7 @@ class TimmSED(nn.Module):
         init_bn(self.bn0)
         init_layer(self.fc1)
 
-    def forward(self, x, targets=None, do_mixup=False, weights=None):
+    def forward(self, x, targets=None, strong_targets=None, do_mixup=False, weights=None):
         # (batch_size, len_audio)
         with autocast(enabled=False):
             with torch.no_grad():
@@ -66,9 +69,21 @@ class TimmSED(nn.Module):
 
                 if self.training and do_mixup:
                     if np.random.rand() < 0.5:
-                        x, targets = mixup(x, targets, self.cfg.mixup_alpha, weights=weights)
+                        x, targets = mixup(
+                            x,
+                            targets,
+                            self.cfg.mixup_alpha,
+                            weights=weights,
+                            strong_targets=strong_targets,
+                        )
                     else:
-                        x, targets = cutmix(x, targets, self.cfg.mixup_alpha, weights=weights)
+                        x, targets = cutmix(
+                            x,
+                            targets,
+                            self.cfg.mixup_alpha,
+                            weights=weights,
+                            strong_targets=strong_targets,
+                        )
 
         x = x.transpose(1, 3)  # (batch_size, mel_bins, time_steps, 3)
         x = self.bn0(x)
@@ -81,7 +96,11 @@ class TimmSED(nn.Module):
         x = self.encoder(x)
 
         # Aggregate in frequency axis
-        x = torch.mean(x, dim=3)  # <- actually agg in the timestep axis
+        x = torch.mean(x, dim=3)
+
+        framewise_x = self.framewise_pool(x)
+        framewise_logit = self.framewise_cls(framewise_x)
+        framewise_output = framewise_logit.sigmoid()
 
         x1 = F.max_pool1d(x, kernel_size=3, stride=1, padding=1)
         x2 = F.avg_pool1d(x, kernel_size=3, stride=1, padding=1)
@@ -98,13 +117,15 @@ class TimmSED(nn.Module):
         output_dict = {
             "clipwise_output": clipwise_output,  # (n_samples, n_class)
             "logit": logit,  # (n_samples, n_class)
+            "framewise_logit": framewise_logit,  # (n_samples, n_class, n_frames)
+            "framewise_output": framewise_output,
         }
 
         loss = None
         if targets is not None:
             if do_mixup:
-                loss = mixup_criterion(output_dict["logit"], targets)
+                loss = mixup_criterion(output_dict, targets)
             else:
-                loss = loss_fn(output_dict["logit"], targets, weights=weights)
+                loss = loss_fn(output_dict, targets, weights=weights)
         output_dict["loss"] = loss
         return output_dict

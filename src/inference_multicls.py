@@ -1,50 +1,46 @@
 import numpy as np
+import pandas as pd
 import torch
 
 from configs.multicls import CFG
-from engine import valid_fn
+from dataset import InferenceWaveformDataset
+from engine import inference_fn
 from model import TimmSED
-from train_multicls import create_dataset, create_df
-from utils.metrics import MetricMeter, cmp_competition_metric
+from train_multicls import create_df
 
 
-# TODO: Fix this, not improving results :(
-def filter_candidates(y_true, y_pred, ths_arr, topk=10):
-    offsets = np.arange(0, 0.11, 0.01)
-    scores = []
-    for off in offsets:
-        new_y_pred = np.zeros_like(y_pred)
-        for i in range(y_pred.shape[0]):
-            margin = y_pred[i] - np.maximum(ths_arr + off, 0.01)
-            topk_ix = np.argsort(margin)[::-1][:topk]
-            mask = margin[topk_ix] > 0
-            new_y_pred[i, topk_ix] = mask
-        res = cmp_competition_metric(
-            y_true,
-            new_y_pred,
-            scored_classes=[CFG.target_columns.index(x) for x in CFG.scored_birds],
-        )
-        print(new_y_pred.sum(1), new_y_pred.sum(1).max(), new_y_pred.sum(1).mean(), res)
-        scores.append(res)
-    best = np.argmax(scores)
-    print(scores[best], offsets[best])
-    return new_y_pred
-
-
-def eval_kfold(model_paths):
-    df, labels_df = create_df()
-    score = MetricMeter(
-        ranges=np.arange(0.01, 0.31, 0.01),
+def create_dataset(df, mode, batch_size, nb_workers):
+    dataset = InferenceWaveformDataset(
+        df=df,
+        sr=CFG.sample_rate,
+        duration=CFG.period,
+        target_columns=CFG.target_columns,
+        mode=mode,
     )
+
+    dataloader = torch.utils.data.DataLoader(
+        dataset,
+        batch_size=batch_size,
+        num_workers=nb_workers,
+        pin_memory=True,
+        shuffle=False,
+        drop_last=False,
+        collate_fn=InferenceWaveformDataset.collate_fn,
+    )
+    return dataset, dataloader
+
+
+def inference_kfold(model_paths):
+    df, _ = create_df()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    metadata = []
+    probs = []
     for fold, path in model_paths.items():
         print(f"Processing fold {fold}...")
         val_df = df[df.kfold == fold].reset_index(drop=True)
 
-        _, valid_dataloader = create_dataset(
-            val_df, labels_df, "val", CFG.valid_bs, CFG.nb_workers, shuffle=False
-        )
+        _, valid_dataloader = create_dataset(val_df, "val", int(CFG.valid_bs / 4), CFG.nb_workers)
 
         model = TimmSED(
             cfg=CFG,
@@ -54,14 +50,17 @@ def eval_kfold(model_paths):
         ).to(device)
         model.load_state_dict(torch.load(path), strict=True)
 
-        score, _ = valid_fn(model, valid_dataloader, score_meter=score, device=device)
-    res_dict = score.evaluate(optim=True)
-    print(res_dict)
-    # print(
-    #     score.score_at_fixed_ths(
-    #         res_dict["masked_best_ths_per_bird"], post_proc_fn=filter_candidates
-    #     )
-    # )
+        fold_meta, fold_probs = inference_fn(
+            model, valid_dataloader, device=device, max_inf_size=200
+        )
+        metadata.extend(fold_meta)
+        probs.extend(fold_probs)
+    df = pd.DataFrame(metadata)
+    probs = np.array(probs)
+    print(probs.shape)
+    print(df.shape)
+    df["probs"] = probs.tolist()
+    df.to_csv("../data/pseudo.csv", index=False)
 
 
 if __name__ == "__main__":
@@ -105,4 +104,4 @@ if __name__ == "__main__":
 
     # b7 lb75 fixed_norm_first_channel_drop5_blend_chance80_alpha30 {'f1_at_best': (0.11, 0.8955411999778985), 'masked_best_ths_per_bird': {'akiapo': 0.13, 'aniani': 0.060000000000000005, 'apapan': 0.12, 'barpet': 0.18000000000000002, 'crehon': 0.05, 'elepai': 0.08, 'ercfra': 0.08, 'hawama': 0.16, 'hawcre': 0.18000000000000002, 'hawgoo': 0.18000000000000002, 'hawhaw': 0.01, 'hawpet1': 0.05, 'houfin': 0.21000000000000002, 'iiwi': 0.12, 'jabwar': 0.14, 'maupar': 0.29000000000000004, 'omao': 0.12, 'puaioh': 0.03, 'skylar': 0.19, 'warwhe1': 0.16, 'yefcan': 0.11}, 'masked_best_score_per_bird': {'akiapo': 0.9934614088304685, 'aniani': 0.9586843701556919, 'apapan': 0.9601939295172133, 'barpet': 0.9656893801532205, 'crehon': 0.9794949494949494, 'elepai': 0.9138390783934804, 'ercfra': 0.9869998652835781, 'hawama': 0.9724087165961786, 'hawcre': 0.9962236158877875, 'hawgoo': 0.9985850010107136, 'hawhaw': 0.7605562664152468, 'hawpet1': 0.9733652097784362, 'houfin': 0.9139487845178278, 'iiwi': 0.9655858134248596, 'jabwar': 0.93281107608187, 'maupar': 0.49993266446703927, 'omao': 0.9744026769820058, 'puaioh': 0.9395245471075493, 'skylar': 0.9586424480597007, 'warwhe1': 0.9260492137157357, 'yefcan': 0.9430348412345948}, 'masked_optimised_global_score': 0.9292111360527691}
 
-    eval_kfold(model_paths)
+    inference_kfold(model_paths)

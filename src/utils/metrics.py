@@ -1,6 +1,5 @@
 import numpy as np
 from configs.multicls import CFG
-from sklearn import metrics
 from tqdm import tqdm
 
 
@@ -54,20 +53,19 @@ class AverageMeter(object):
 
 
 class MetricMeter(object):
-    def __init__(self, optimise_per_bird=False, ranges=np.arange(0.025, 0.325, 0.025)):
+    def __init__(self, ranges=np.arange(0.025, 0.325, 0.025)):
         self.reset()
-        self._optimise_per_bird = optimise_per_bird
         self._ranges = ranges
 
     def reset(self):
         self.y_true = []
         self.y_pred = []
 
-    def update(self, y_true, y_pred, mask=None):
+    def update(self, y_true, y_pred):
         self.y_true.extend(y_true.cpu().detach().numpy().tolist())
         self.y_pred.extend(y_pred.cpu().detach().numpy().tolist())
 
-    def score(self, y_true, y_pred, scored_birds=None, optim=False):
+    def score(self, y_true, y_pred, scored_birds=None, optim=False, postproc_fn=None):
         if optim:
             best_ths = {}
             best_scores = {}
@@ -76,12 +74,18 @@ class MetricMeter(object):
                 bird = CFG.target_columns[k]
                 if scored_birds is not None and k not in scored_birds:
                     continue
-                scores_k = [
-                    cmp_competition_metric(
-                        np.array(y_true)[:, k, None], np.array(y_pred)[:, k, None] > x
-                    )
-                    for x in self._ranges
-                ]
+
+                # Search for best threshold
+                scores_k = []
+                for x in self._ranges:
+                    y_true_x = np.array(y_true)[:, k, None]
+                    y_pred_x = np.array(y_pred)[:, k, None]
+                    if postproc_fn is not None:
+                        y_pred_x = postproc_fn(y_pred_x, x)
+                    else:
+                        # Simple tresholding
+                        y_pred_x = y_pred_x > x
+                    scores_k.append(cmp_competition_metric(y_true_x, y_pred_x))
                 best_k = np.argmax(scores_k)
                 best_ths[bird] = self._ranges[best_k]
                 best_scores[bird] = scores_k[best_k]
@@ -102,14 +106,35 @@ class MetricMeter(object):
                 "f1_at_best": (self._ranges[best], scores[best]),
             }
 
-    @property
-    def avg(self):
+    def score_at_fixed_ths(self, ths_dict, post_proc_fn=None):
+        y_true = np.array(self.y_true)
+        y_pred = np.array(self.y_pred)  # (samples, nb_classes)
+
+        # Create a array of thresholds
+        ths_arr = np.ones((len(CFG.target_columns)))
+        for bird in CFG.scored_birds:
+            ths = ths_dict[bird]
+            idx = CFG.target_columns.index(bird)
+            ths_arr[idx] = ths
+        print((ths_arr < 1).sum())
+
+        if post_proc_fn:
+            y_pred = post_proc_fn(y_true, y_pred, ths_arr)
+        else:
+            # Simple thresholding
+            y_pred = y_pred > ths_arr[None, :]
+        return cmp_competition_metric(
+            y_true, y_pred, scored_classes=[CFG.target_columns.index(x) for x in CFG.scored_birds]
+        )
+
+    def evaluate(self, optim=False, postproc_fn=None):
         scores = self.score(self.y_true, self.y_pred, optim=False)
         scores_masked = self.score(
             self.y_true,
             self.y_pred,
             scored_birds=[CFG.target_columns.index(x) for x in CFG.scored_birds],
-            optim=self._optimise_per_bird,
+            optim=optim,
+            postproc_fn=postproc_fn,
         )
         scores.update({f"masked_{k}": v for k, v in scores_masked.items()})
         return scores

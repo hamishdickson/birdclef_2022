@@ -13,7 +13,7 @@ from engine import Trainer
 from utils.general import set_seed
 
 
-def create_dataset(df, labels_df, mode, batch_size, nb_workers, shuffle):
+def create_dataset(df, labels_df, pseudo_df, mode, batch_size, nb_workers, shuffle):
     dataset = WaveformDataset(
         df=df,
         labels_df=labels_df,
@@ -25,6 +25,7 @@ def create_dataset(df, labels_df, mode, batch_size, nb_workers, shuffle):
         label_smoothing=CFG.label_smoothing,
         bg_blend_chance=CFG.bg_blend_chance,
         bg_blend_alpha=CFG.bg_blend_alpha,
+        pseudo_df=pseudo_df,
     )
 
     if shuffle:
@@ -48,7 +49,7 @@ def create_dataset(df, labels_df, mode, batch_size, nb_workers, shuffle):
     return dataset, dataloader
 
 
-def create_df():
+def create_df(load_pseudo=False):
     all_path = glob.glob(CFG.audios_path)
 
     df = pd.read_csv(CFG.train_metadata)
@@ -87,6 +88,12 @@ def create_df():
         df[["new_target", "file_path"]], left_on="filepath", right_on="file_path", how="inner"
     )[["file_path", "new_target", "bird_pred", "seconds"]]
     labels_df = labels_df.set_index("file_path")
+
+    if load_pseudo:
+        pseudo_df = pd.read_csv(CFG.train_pseudo)[
+            ["new_target", "duration", "filename", "probs", "file_path"]
+        ].set_index(["file_path", "duration"])
+        return df, labels_df, pseudo_df
     return df, labels_df
 
 
@@ -96,16 +103,16 @@ def train_fold():
     )  # make sure each fold has different seed set, dataset split seed set separately
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    df, labels_df = create_df()
+    df, labels_df, pseudo_df = create_df(load_pseudo=True)
 
     train_df = df[df.kfold != CFG.fold].reset_index(drop=True)
     val_df = df[df.kfold == CFG.fold].reset_index(drop=True)
 
     train_dataset, train_dataloader = create_dataset(
-        train_df, labels_df, "train", CFG.train_bs, CFG.nb_workers, shuffle=True
+        train_df, labels_df, pseudo_df, "train", CFG.train_bs, CFG.nb_workers, shuffle=True
     )
     valid_dateset, valid_dataloader = create_dataset(
-        val_df, labels_df, "val", CFG.valid_bs, CFG.nb_workers, shuffle=False
+        val_df, labels_df, pseudo_df, "val", CFG.valid_bs, CFG.nb_workers, shuffle=False
     )
 
     return Trainer(CFG, device=device).train(train_dataloader, valid_dataloader)

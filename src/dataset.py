@@ -16,6 +16,7 @@ from utils.transforms import (
     crop_audio_center,
     crop_or_pad,
     cvt_audio_to_array,
+    cvt_multiple_clips_to_array,
     load_audio,
 )
 
@@ -105,6 +106,7 @@ class WaveformDataset(BinaryDataset):
         label_smoothing=0.0,
         bg_blend_chance=0.8,
         bg_blend_alpha=(0.3, 0.6),
+        pseudo_df=None,
     ):
         super().__init__(df, sr, duration, mode=mode)
         self.labels_df = labels_df
@@ -113,7 +115,7 @@ class WaveformDataset(BinaryDataset):
         self.label_smoothing = label_smoothing if mode == "train" else 0.0
         self.bg_blend_chance = bg_blend_chance
         self.bg_blend_alpha = bg_blend_alpha
-        self._loaded_audio = None
+        self.pseudo_df = pseudo_df
         if self.mode == "train" and self.bg_blend_chance > 0:
             print("Creating binary df for augmentations...")
             self.binary_df = create_binary_df()[0]
@@ -122,6 +124,7 @@ class WaveformDataset(BinaryDataset):
 
     def __getitem__(self, idx: int):
         sample = self.df.loc[idx, :]
+        strong_labels = torch.zeros((1, len(self.target_columns)))
 
         wav_path = sample["file_path"]
         labels = sample["new_target"]
@@ -129,14 +132,27 @@ class WaveformDataset(BinaryDataset):
         is_scored = sample["is_scored"]
 
         with LOADTIMER:
-            y = cvt_audio_to_array(
-                wav_path,
-                labels_df=self.labels_df,
-                target_sr=self.sr,
-                duration=self.duration,
-                use_highest=self.mode != "train",
-                split_audio_root=self.split_audio_root,
-            )
+            if self.pseudo_df is not None:
+                y, strong_labels = cvt_multiple_clips_to_array(
+                    wav_path,
+                    pseudo_df=self.pseudo_df,
+                    target_sr=self.sr,
+                    duration=self.duration,
+                    split_audio_root=self.split_audio_root,
+                    target_columns=self.target_columns,
+                    is_val=self.mode != "train",
+                )
+
+            else:
+                y = cvt_audio_to_array(
+                    wav_path,
+                    labels_df=self.labels_df,
+                    target_sr=self.sr,
+                    duration=self.duration,
+                    use_highest=self.mode != "train",
+                    split_audio_root=self.split_audio_root,
+                )
+        # print(y.shape[0] / self.sr, strong_labels.shape)
 
         if len(y) > 0 and self.wave_transforms:
             with AUGTIMER:
@@ -180,6 +196,70 @@ class WaveformDataset(BinaryDataset):
         return {
             "audio": y,
             "targets": targets,
+            "strong_targets": strong_labels,
             "weights": weight,
             "is_scored": is_scored,
+        }
+
+
+class InferenceWaveformDataset(BinaryDataset):
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        sr: int,
+        duration: float,
+        target_columns: list,
+        mode="train",
+    ):
+        super().__init__(df, sr, duration, mode=mode)
+        self.target_columns = target_columns
+
+    @staticmethod
+    def collate_fn(batch):
+        audios = []
+        rows = []
+        for sample in batch:
+            audios.extend(sample["audios"])
+            rows.extend(sample["df_rows"])
+        audios = torch.from_numpy(np.stack(audios, 0)).float()
+        return {"audio": audios, "df_rows": rows}
+
+    def __getitem__(self, idx: int):
+        sample = self.df.loc[idx, :]
+
+        wav_path = sample["file_path"]
+
+        with LOADTIMER:
+            y = load_audio(
+                wav_path,
+                target_sr=self.sr,
+            )
+
+        if len(y) > 0 and self.wave_transforms:
+            with AUGTIMER:
+                y = self.wave_transforms(y, sr=self.sr)
+
+        nb_chunks = int(np.ceil((len(y) / self.sr) / self.duration))
+        all_clips = []
+        all_rows = []
+        for i in range(nb_chunks):
+            clip = y[i * (self.sr * self.duration) : (i + 1) * (self.sr * self.duration)]
+
+            clip = crop_or_pad(
+                clip,
+                self.duration * self.sr,
+                sr=self.sr,
+                train=self.mode == "train",
+                probs=None,
+            )
+            clip = torch.from_numpy(clip).float()
+            all_clips.append(clip)
+
+            clip_row = sample.copy()
+            clip_row["duration"] = int((i + 1) * self.duration)
+            all_rows.append(clip_row)
+
+        return {
+            "audios": all_clips,
+            "df_rows": all_rows,
         }

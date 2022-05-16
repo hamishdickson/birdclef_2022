@@ -1,3 +1,4 @@
+import ast
 import os.path as osp
 
 import colorednoise as cn
@@ -256,6 +257,47 @@ def cvt_audio_to_array(
         y = load_audio(path, target_sr)
         y = y[target_sr * start : target_sr * end]
     return y
+
+
+def cvt_multiple_clips_to_array(
+    path,
+    pseudo_df,
+    target_sr,
+    duration,
+    split_audio_root,
+    target_columns,
+    temperature=1,
+    is_val=False,
+):
+    clips_df = pseudo_df.loc[path]
+    audio_dur = len(clips_df) * 5
+
+    nb_clips = int(duration / 5)
+    if is_val:
+        start_ix = 0
+    else:
+        start_ix = np.random.choice(max(len(clips_df) - nb_clips, 1))
+    ends = [(start_ix + x) * 5 for x in range(1, nb_clips + 1) if (start_ix + x) * 5 <= audio_dur]
+    # print(len(clips_df), audio_dur, nb_clips, start_ix, ends)
+    probs = np.array(clips_df.loc[ends, "probs"].apply(lambda x: ast.literal_eval(x)).to_list())
+    probs = np.pad(probs, pad_width=((0, nb_clips - probs.shape[0]), (0, 0)))
+    mask = np.zeros_like(probs)
+    for i, end in enumerate(ends):
+        birds = clips_df.loc[end, "new_target"].split()
+        birds_idx = [target_columns.index(x) for x in birds]
+        mask[i, birds_idx] = 1
+    probs = probs / probs.max(axis=0, keepdims=True)
+    probs = probs * mask
+    probs = probs ** (1 / temperature)
+    probs = torch.from_numpy(probs).float().permute(1, 0)  # 152 x 4
+
+    clips = []
+    for end in ends:
+        new_path = osp.join(
+            split_audio_root, "/".join(path.split("/")[-2:]).replace(".ogg", f"_{str(end)}.ogg")
+        )
+        clips.append(load_audio(new_path, target_sr))
+    return np.concatenate(clips), probs
 
 
 def crop_audio_center(y, target_sr, duration):
