@@ -268,13 +268,21 @@ def cvt_multiple_clips_to_array(
     target_columns,
     temperature=1,
     is_val=False,
+    labels_df=None,
 ):
     clips_df = pseudo_df.loc[path]
     audio_dur = len(clips_df) * 5
+    val_pred_ix = -1  # used to inform which 5s we are evaluating to compare with 5s models
 
     nb_clips = int(duration / 5)
     if is_val:
-        start_ix = 0
+        start_sec, _ = sample_clip_start_from_df(path, labels_df, 5, use_highest=True)
+        focus_ix = int(start_sec / 5)
+        # try to center focus in the mid sequence
+        start_ix = focus_ix - (duration // 5) // 2
+        val_pred_ix = ((duration // 5) // 2) + min(0, start_ix)
+        start_ix = max(0, start_ix)
+        # print(focus_ix, len(clips_df), start_ix, val_pred_ix)
     else:
         start_ix = np.random.choice(max(len(clips_df) - nb_clips, 1))
     ends = [(start_ix + x) * 5 for x in range(1, nb_clips + 1) if (start_ix + x) * 5 <= audio_dur]
@@ -297,7 +305,7 @@ def cvt_multiple_clips_to_array(
             split_audio_root, "/".join(path.split("/")[-2:]).replace(".ogg", f"_{str(end)}.ogg")
         )
         clips.append(load_audio(new_path, target_sr))
-    return np.concatenate(clips), probs
+    return np.concatenate(clips), probs, val_pred_ix
 
 
 def crop_audio_center(y, target_sr, duration):

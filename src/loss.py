@@ -2,6 +2,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from configs.multicls import CFG
+
 
 # https://www.kaggle.com/c/rfcx-species-audio-detection/discussion/213075
 class FocalLoss(nn.Module):
@@ -33,7 +35,7 @@ def mixup_criterion(logits, new_targets, framewise_weight=1):
         new_targets["strong_targets2"],
     )
 
-    criterion = FocalLoss(alpha=0.5)
+    criterion = FocalLoss(alpha=CFG.focal_alpha, gamma=CFG.focal_gamma)
     loss1 = lam * criterion(clipwise_logit, targets1)
     loss2 = (1 - lam) * criterion(clipwise_logit, targets2)
     # if weights1 is not None and weights2 is not None:
@@ -51,7 +53,7 @@ def mixup_criterion(logits, new_targets, framewise_weight=1):
 
 def loss_fn(logits, targets, weights=None, strong_targets=None, framewise_weight=1):
     clipwise_logit, framewise_logit = logits["logit"], logits["framewise_logit"]
-    loss_fct = FocalLoss(alpha=0.5)
+    loss_fct = FocalLoss(alpha=CFG.focal_alpha, gamma=CFG.focal_gamma)
 
     clipwise_loss = loss_fct(clipwise_logit, targets)
     # if weights is not None:

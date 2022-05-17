@@ -47,7 +47,8 @@ class TimmSED(nn.Module):
         self.att_block = AttBlockV2(in_features, num_classes, activation="sigmoid")
 
         self.framewise_pool = nn.AdaptiveMaxPool1d(int(self.cfg.period / 5))
-        self.framewise_cls = nn.Conv1d(in_features, num_classes, kernel_size=1)
+        self.framewise_fc1 = nn.Linear(in_features, in_features, bias=True)
+        self.framewise_cls = nn.Linear(in_features, num_classes)
 
         self.init_weight()
 
@@ -96,10 +97,16 @@ class TimmSED(nn.Module):
         x = self.encoder(x)
 
         # Aggregate in frequency axis
-        x = torch.mean(x, dim=3)
+        x = torch.mean(x, dim=3)  # (batch_size, nb_channels, time_steps)
 
+        # Framwise pred
         framewise_x = self.framewise_pool(x)
+        framewise_x = F.dropout(framewise_x, p=self.cfg.dropout, training=self.training)
+        framewise_x = framewise_x.transpose(1, 2)  # (batch_size, time_steps, nb_channels)
+        framewise_x = F.relu_(self.framewise_fc1(framewise_x))
+        framewise_x = F.dropout(framewise_x, p=self.cfg.dropout, training=self.training)
         framewise_logit = self.framewise_cls(framewise_x)
+        framewise_logit = framewise_logit.transpose(1, 2)
         framewise_output = framewise_logit.sigmoid()
 
         x1 = F.max_pool1d(x, kernel_size=3, stride=1, padding=1)

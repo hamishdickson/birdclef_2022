@@ -28,9 +28,12 @@ class CFG:
     WEIGHT_DECAY = 1e-6
     mixup_alpha = 0.4
     scored_weight = 1
-    label_smoothing = 0.0
+    label_smoothing = 0.1
     bg_blend_chance = 0.0
     bg_blend_alpha = (0.3, 0.6)
+
+    focal_alpha = 1.0
+    focal_gamma = 1.0
 
     train_bs = 32  # 32
     valid_bs = 32  # 64

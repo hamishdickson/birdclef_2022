@@ -125,6 +125,7 @@ class WaveformDataset(BinaryDataset):
     def __getitem__(self, idx: int):
         sample = self.df.loc[idx, :]
         strong_labels = torch.zeros((1, len(self.target_columns)))
+        val_pred_ix = -1  # used to inform which 5s we are evaluating to compare with 5s models
 
         wav_path = sample["file_path"]
         labels = sample["new_target"]
@@ -133,7 +134,7 @@ class WaveformDataset(BinaryDataset):
 
         with LOADTIMER:
             if self.pseudo_df is not None:
-                y, strong_labels = cvt_multiple_clips_to_array(
+                y, strong_labels, val_pred_ix = cvt_multiple_clips_to_array(
                     wav_path,
                     pseudo_df=self.pseudo_df,
                     target_sr=self.sr,
@@ -141,6 +142,7 @@ class WaveformDataset(BinaryDataset):
                     split_audio_root=self.split_audio_root,
                     target_columns=self.target_columns,
                     is_val=self.mode != "train",
+                    labels_df=self.labels_df,
                 )
 
             else:
@@ -189,7 +191,7 @@ class WaveformDataset(BinaryDataset):
 
         y = torch.from_numpy(y).float()
 
-        targets = np.ones(len(self.target_columns), dtype=float) * self.label_smoothing
+        targets = np.zeros(len(self.target_columns), dtype=float)
         for ebird_code in labels.split():
             targets[self.target_columns.index(ebird_code)] = 1.0 - self.label_smoothing
 
@@ -199,6 +201,7 @@ class WaveformDataset(BinaryDataset):
             "strong_targets": strong_labels,
             "weights": weight,
             "is_scored": is_scored,
+            "val_pred_ix": val_pred_ix,
         }
 
 
