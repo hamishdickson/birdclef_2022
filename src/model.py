@@ -8,8 +8,8 @@ from torch.cuda.amp import autocast
 from torchaudio.transforms import AmplitudeToDB, MelSpectrogram
 from torchlibrosa.augmentation import SpecAugmentation
 
+from . import loss as loss_module
 from .layers import AttBlockV2, init_bn, init_layer
-from .loss import loss_fn, mixup_criterion
 from .utils.general import cutmix, mixup
 from .utils.transforms import mono_to_color
 
@@ -48,15 +48,19 @@ def pad_framewise_output(framewise_output: torch.Tensor, frames_num: int):
     return output
 
 
+def build_loss_fn(loss_name, **loss_kwargs):
+    return getattr(loss_module, loss_name)(**loss_kwargs)
+
+
 class TimmSED(nn.Module):
     def __init__(self, base_model_name: str, cfg, pretrained=False, num_classes=24):
         super().__init__()
         self.cfg = cfg
-        self.loss_name = cfg.loss_name
-        if self.loss_name == "FocalLoss":
-            self.loss_kwargs = cfg.focal_kwargs
-        elif self.loss_name == "AsymmetricLoss":
-            self.loss_kwargs = cfg.asym_kwargs
+        loss_name = cfg.loss_name
+        if loss_name == "FocalLoss":
+            self._loss_fn = build_loss_fn(loss_name, **cfg.focal_kwargs)
+        elif loss_name == "AsymmetricLoss":
+            self._loss_fn = build_loss_fn(loss_name, **cfg.asym_kwargs)
 
         self.mel_trans = MelSpectrogram(
             sample_rate=self.cfg.sample_rate,
@@ -159,19 +163,16 @@ class TimmSED(nn.Module):
             "logit": logit,  # (n_samples, n_class)
         }
 
-        loss = None
-        if targets is not None:
+        if self.training:
             if do_mixup:
-                loss = mixup_criterion(
-                    output_dict["logit"], targets, self.loss_name, **self.loss_kwargs
-                )
+                loss = loss_module.mixup_criterion(output_dict["logit"], targets, self._loss_fn)
             else:
-                loss = loss_fn(
-                    output_dict["logit"],
-                    targets,
-                    loss_name=self.loss_name,
-                    weights=weights,
-                    **self.loss_kwargs
-                )
+                loss = self._loss_fn(output_dict["logit"], targets)
+                if weights is not None:
+                    loss = (loss * weights.unsqueeze(-1)).sum(0) / weights.sum()
+                loss = loss.mean()
+        else:
+            loss = self._loss_fn(output_dict["logit"], targets)
+            loss = loss.mean()
         output_dict["loss"] = loss
         return output_dict

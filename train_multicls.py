@@ -9,8 +9,7 @@ from sklearn.model_selection import StratifiedKFold
 
 from src.configs.multicls import CFG
 from src.dataset import WaveformDataset
-from src.engine import Trainer, valid_fn
-from src.model import TimmSED
+from src.engine import Trainer
 from src.utils.general import set_seed
 from src.utils.metrics import MetricMeter
 
@@ -82,50 +81,50 @@ def create_df():
     return df, labels_df
 
 
-def train_fold():
-    set_seed(
-        CFG.seed + CFG.fold
-    )  # make sure each fold has different seed set, dataset split seed set separately
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    df, labels_df = create_df()
-
+def train_fold(trainer: Trainer, df: pd.DataFrame, labels_df: pd.DataFrame):
+    # make sure each fold has different seed set, dataset split seed set separately
+    set_seed(CFG.seed + CFG.fold)
     train_df = df[df.kfold != CFG.fold].reset_index(drop=True)
     val_df = df[df.kfold == CFG.fold].reset_index(drop=True)
-
-    train_dataset, train_dataloader = create_dataset(
+    _, train_dataloader = create_dataset(
         train_df, labels_df, "train", CFG.train_bs, CFG.nb_workers, shuffle=True
     )
-    valid_dateset, valid_dataloader = create_dataset(
+    _, valid_dataloader = create_dataset(
         val_df, labels_df, "val", CFG.valid_bs, CFG.nb_workers, shuffle=False
     )
+    return trainer.train(train_dataloader, valid_dataloader)
 
-    return Trainer(CFG, device=device).train(train_dataloader, valid_dataloader)
 
-
-def eval_kfold(model_paths):
+def main(args):
+    trainer = Trainer(CFG, torch.device(args.device))
     df, labels_df = create_df()
-    score = MetricMeter(optimise_per_bird=True, ranges=np.arange(0.01, 0.31, 0.01))
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    for fold, path in model_paths.items():
-        print(f"Processing fold {fold}...")
-        val_df = df[df.kfold == fold].reset_index(drop=True)
+    if args.test_only:
+        model_paths = [
+            str(p)
+            for p in Path(trainer._output_dir).glob("*.bin")
+            if CFG.base_model_name in str(p)
+        ]
+        score = MetricMeter(optimise_per_bird=True, ranges=np.arange(0.01, 0.31, 0.01))
+        for path in model_paths:
+            fold = int(path.split("/")[-1][5])
+            print(f"Processing fold {fold}...")
+            val_df = df[df.kfold == fold].reset_index(drop=True)
+            _, valid_dataloader = create_dataset(
+                val_df, labels_df, "val", CFG.valid_bs, CFG.nb_workers, shuffle=False
+            )
+            score = trainer.validate(valid_dataloader, path, score_meter=score)
+        print(score.avg)
+        return
 
-        valid_dateset, valid_dataloader = create_dataset(
-            val_df, labels_df, "val", CFG.valid_bs, CFG.nb_workers, shuffle=False
-        )
-
-        model = TimmSED(
-            cfg=CFG,
-            base_model_name=CFG.base_model_name,
-            pretrained=CFG.pretrained,
-            num_classes=CFG.num_classes,
-        ).to(device)
-        model.load_state_dict(torch.load(path), strict=True)
-
-        score, _ = valid_fn(model, valid_dataloader, score_meter=score, device=device)
-    print(score.avg)
+    if args.multi_fold:
+        for fold in range(args.nb_folds):
+            CFG.fold = fold
+            train_fold(trainer, df, labels_df)
+    else:
+        assert CFG.fold == args.fold, "config. fold must be equal to args fold"
+        train_fold(trainer, df, labels_df)
+    return
 
 
 if __name__ == "__main__":
@@ -151,6 +150,8 @@ if __name__ == "__main__":
         help="Weigh samples by rating",
         action="store_true",
     )
+    parser.add_argument("--test-only", dest="test_only", help="Run inference", action="store_true")
+    parser.add_argument("--device", type=str, help="Set device", default="cuda")
     args = parser.parse_args()
     print(args)
 
@@ -166,14 +167,4 @@ if __name__ == "__main__":
     CFG.loss_name = args.loss
     CFG.weighted_by_rating = args.wbr
 
-    if args.multi_fold:
-        folds = range(args.nb_folds)
-
-        model_paths = {}
-        for fold in folds:
-            CFG.fold = fold
-            model_paths[fold] = train_fold()[0]
-        eval_kfold(model_paths)
-
-    else:
-        train_fold()
+    main(args)

@@ -7,7 +7,6 @@ from torch.cuda.amp import GradScaler, autocast
 from tqdm import tqdm
 from transformers.optimization import get_cosine_schedule_with_warmup
 
-from .loss import loss_fn
 from .model import TimmSED
 from .utils.metrics import AverageMeter, MetricMeter
 
@@ -58,19 +57,39 @@ def valid_fn(model, data_loader, device, loss_meter=None, score_meter=None):
         for data in tk0:
             inputs = data["audio"].to(device)
             targets = data["targets"].to(device)
-            outputs = model(inputs)
-            loss = loss_fn(outputs["logit"], targets)
-            loss_meter.update(loss.item(), inputs.size(0))
+            outputs = model(inputs, targets)
+            loss_meter.update(outputs["loss"].item(), inputs.size(0))
             score_meter.update(targets, outputs["clipwise_output"], mask=data.get("is_scored"))
             tk0.set_postfix(loss=loss_meter.avg)
     return score_meter, loss_meter
 
 
 class Trainer:
-    def __init__(self, cfg, device="cuda"):
+    def __init__(self, cfg, device):
         self.cfg = cfg
         self.device = device
         self._output_dir = Path(self.cfg.output_dir) / f"{self.cfg.exp_name}"
+
+    def validate(self, valid_dataloader, model_path, loss_meter=None, score_meter=None):
+        model = TimmSED(
+            cfg=self.cfg,
+            base_model_name=self.cfg.base_model_name,
+            pretrained=self.cfg.pretrained,
+            num_classes=self.cfg.num_classes,
+        )
+        model.load_state_dict(torch.load(model_path, "cpu"), strict=True)
+        print(f"Loaded state dict from {model_path}")
+        model.to(self.device)
+        start_time = time.time()
+        valid_score, valid_loss = valid_fn(
+            model, valid_dataloader, self.device, loss_meter, score_meter
+        )
+        elapsed = time.time() - start_time
+        print(
+            f"Time: {elapsed:.0f}s - avg_val_loss: {valid_loss.avg:.5f}"
+            f" - avg_val_score: {valid_score.avg:.5f}"
+        )
+        return valid_score
 
     def train(self, train_dataloader, valid_dataloader):
         print(f"Fold {self.cfg.fold} Training")
@@ -182,7 +201,8 @@ class Trainer:
                     )
                 else:
                     print(
-                        f"Epoch {epoch + 1} - train_{key}:{train_avg[key]:0.5f}  valid_{key}:{valid_avg[key]:0.5f}"
+                        f"Epoch {epoch + 1} - train_{key}:{train_avg[key]:0.5f}"
+                        " valid_{key}:{valid_avg[key]:0.5f}"
                     )
 
             new_best = valid_avg.get("masked_f1_at_best", valid_avg["f1_at_best"])[1]
@@ -190,7 +210,8 @@ class Trainer:
                 self._output_dir.mkdir(exist_ok=True, parents=True)
                 new_save_path = (
                     self._output_dir
-                    / f"fold-{self.cfg.fold}-{self.cfg.base_model_name}-{self.cfg.exp_name}-epoch-{epoch}-f1-{new_best:.3f}-{valid_avg['f1_at_best'][1]:.3f}.bin"
+                    / f"fold-{self.cfg.fold}-{self.cfg.base_model_name}-{self.cfg.exp_name}"
+                    f"-epoch-{epoch}-f1-{new_best:.3f}-{valid_avg['f1_at_best'][1]:.3f}.bin"
                 )
                 print(f">>>>>>>> Model Improved From {best_score} ----> {new_best}")
                 torch.save(model.state_dict(), new_save_path)

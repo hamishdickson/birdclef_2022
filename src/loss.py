@@ -1,3 +1,5 @@
+from typing import Dict
+
 import torch
 import torch.nn as nn
 
@@ -92,11 +94,9 @@ class AsymmetricLoss(nn.Module):
         return _loss
 
 
-def mixup_criterion(preds, new_targets, loss_name, **kwargs):
-    if loss_name == "FocalLoss":
-        criterion = FocalLoss(**kwargs)
-    elif loss_name == "AsymmetricLoss":
-        criterion = AsymmetricLoss(**kwargs)
+def mixup_criterion(
+    preds: torch.Tensor, new_targets: Dict[str, torch.Tensor], criterion: nn.Module
+) -> torch.Tensor:
     targets1, targets2, lam, weights1, weights2 = (
         new_targets["targets1"],
         new_targets["targets2"],
@@ -110,14 +110,3 @@ def mixup_criterion(preds, new_targets, loss_name, **kwargs):
         loss1 = (loss1 * weights1.unsqueeze(-1)).sum(0) / weights1.sum()
         loss2 = (loss2 * weights2.unsqueeze(-1)).sum(0) / weights2.sum()
     return loss1.mean() + loss2.mean()
-
-
-def loss_fn(logits, targets, loss_name, weights=None, **kwargs):
-    if loss_name == "FocalLoss":
-        loss_fct = FocalLoss(**kwargs)
-    elif loss_name == "AsymmetricLoss":
-        loss_fct = AsymmetricLoss(**kwargs)
-    loss = loss_fct(logits, targets)
-    if weights is not None:
-        loss = (loss * weights.unsqueeze(-1)).sum(0) / weights.sum()
-    return loss.mean()
