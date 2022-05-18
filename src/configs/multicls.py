@@ -26,7 +26,7 @@ class CFG:
 
     seed = 71
     label_smoothing = 0.0
-    bg_blend_chance = (0.0,)
+    bg_blend_chance = 0.0
     bg_blend_alpha = (0.3, 0.6)
 
     dropout = 0.5
