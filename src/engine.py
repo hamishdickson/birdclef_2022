@@ -7,7 +7,7 @@ from torch.cuda.amp import GradScaler, autocast
 from tqdm import tqdm
 from transformers.optimization import get_cosine_schedule_with_warmup
 
-from .model import TimmSED
+from . import model as models
 from .utils.metrics import AverageMeter, MetricMeter
 
 
@@ -71,7 +71,7 @@ class Trainer:
         self._output_dir = Path(self.cfg.output_dir) / f"{self.cfg.exp_name}"
 
     def validate(self, valid_dataloader, model_path, loss_meter=None, score_meter=None):
-        model = TimmSED(
+        model = getattr(models, self.cfg.meta_model_name)(
             cfg=self.cfg,
             base_model_name=self.cfg.base_model_name,
             pretrained=self.cfg.pretrained,
@@ -94,7 +94,7 @@ class Trainer:
     def train(self, train_dataloader, valid_dataloader):
         print(f"Fold {self.cfg.fold} Training")
 
-        model = TimmSED(
+        model = getattr(models, self.cfg.meta_model_name)(
             cfg=self.cfg,
             base_model_name=self.cfg.base_model_name,
             pretrained=self.cfg.pretrained,

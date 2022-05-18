@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import torch
 from sklearn.model_selection import StratifiedKFold
+from torch.utils.data import WeightedRandomSampler
 
 from src.configs.multicls import CFG
 from src.dataset import WaveformDataset
@@ -27,12 +28,18 @@ def create_dataset(df, labels_df, mode, batch_size, nb_workers, shuffle):
         bg_blend_chance=CFG.bg_blend_chance,
         weighted_by_rating=CFG.weighted_by_rating,
     )
+    sampler = None
+    if mode == "train" and CFG.class_count_sensitive_sampler:
+        sampler = WeightedRandomSampler(df["sample_weight"], len(df))
+        print("Used class-count sensitive sampler")
+        shuffle = False
     dataloader = torch.utils.data.DataLoader(
         dataset,
         batch_size=batch_size,
         num_workers=nb_workers,
         pin_memory=True,
         shuffle=shuffle,
+        sampler=sampler,
     )
     return dataset, dataloader
 
@@ -76,8 +83,8 @@ def create_df():
         df[["new_target", "file_path"]], left_on="filepath", right_on="file_path", how="inner"
     )[["file_path", "new_target", "bird_pred", "seconds"]]
     labels_df = labels_df.set_index("file_path")
-    # df["weight"] = df.groupby("primary_label")["primary_label"].transform("count")
-    # df["weight"] = 1 / np.log1p(df["weight"])
+    df["sample_weight"] = df.groupby("primary_label")["primary_label"].transform("count")
+    df["sample_weight"] = 1 / np.log1p(df["sample_weight"])
     return df, labels_df
 
 
@@ -142,12 +149,19 @@ if __name__ == "__main__":
     parser.add_argument("--gd", type=int, default=1, help="gradient accumulation steps")
     parser.add_argument("--wd", type=float, default=1e-4, help="weight decay")
     parser.add_argument("--base-model", type=str, help="timm backbone")
+    parser.add_argument("--meta-model", type=str, help="meta model", default="TimmSED")
     parser.add_argument("--dp", type=float, default=0.0, help="drop path rate")
     parser.add_argument("--loss", type=str, default="FocalLoss", help="loss function")
     parser.add_argument(
         "--wbr",
         dest="wbr",
         help="Weigh samples by rating",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--ccs-sampler",
+        dest="ccs_sampler",
+        help="apply class-count sensitive sampler",
         action="store_true",
     )
     parser.add_argument("--test-only", dest="test_only", help="Run inference", action="store_true")
@@ -163,8 +177,10 @@ if __name__ == "__main__":
     CFG.train_bs = args.train_bs
     CFG.grad_acc_steps = args.gd
     CFG.base_model_name = args.base_model
+    CFG.meta_model_name = args.meta_model
     CFG.drop_path = args.dp
     CFG.loss_name = args.loss
     CFG.weighted_by_rating = args.wbr
+    CFG.class_count_sensitive_sampler = args.ccs_sampler
 
     main(args)

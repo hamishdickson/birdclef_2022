@@ -36,6 +36,10 @@ class CFG:
     focal_kwargs = {"alpha": 0.5, "gamma": 2.0}
     asym_kwargs = {"gamma_neg": 2, "gamma_pos": 0}
     weighted_by_rating = False
+    class_count_sensitive_sampler = False
+
+    base_model_name = "tf_efficientnet_b3_ns"
+    meta_model_name = "TimmSED"
 
     epochs = 23
     cutmix_and_mixup_epochs = 18
@@ -50,7 +54,6 @@ class CFG:
     scored_weight = 1
     train_bs = 16  # 32
     valid_bs = 16  # 64
-    base_model_name = "tf_efficientnet_b3_ns"
     starting_weights = None  # "fold-0-b3-779.bin"
     load_up_to_layer = None  # 1
     apex = True

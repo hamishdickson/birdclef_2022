@@ -120,6 +120,7 @@ class WaveformDataset(BinaryDataset):
             self.binary_df = pd.read_csv("data/train_backgrounds.csv")
             self.binary_df = self.binary_df[self.binary_df.label == 0]
             print(f"Removed positive labels from binary df, new shape {len(self.binary_df)}")
+        self.df["weight"] = 1.0
         if weighted_by_rating:
             self.df["weight"] = self.df["rating"] / self.df["rating"].max()
 

@@ -52,6 +52,107 @@ def build_loss_fn(loss_name, **loss_kwargs):
     return getattr(loss_module, loss_name)(**loss_kwargs)
 
 
+class TimmReshape(nn.Module):
+    def __init__(self, base_model_name: str, cfg, pretrained=False, num_classes=24):
+        super().__init__()
+        assert cfg.period // 5, "Input duration must be divisible by 5"
+        self._divisor = cfg.period // 5
+        self.cfg = cfg
+        loss_name = cfg.loss_name
+        if loss_name == "FocalLoss":
+            self._loss_fn = build_loss_fn(loss_name, **cfg.focal_kwargs)
+        elif loss_name == "AsymmetricLoss":
+            self._loss_fn = build_loss_fn(loss_name, **cfg.asym_kwargs)
+
+        self.mel_trans = MelSpectrogram(
+            sample_rate=self.cfg.sample_rate,
+            n_fft=self.cfg.n_fft,
+            hop_length=self.cfg.hop_length,
+            f_min=self.cfg.fmin,
+            f_max=self.cfg.fmax,
+            n_mels=self.cfg.n_mels,
+        )
+        self.amp_db_tran = AmplitudeToDB()
+
+        self.spec_augmenter = SpecAugmentation(
+            time_drop_width=64 // 2, time_stripes_num=2, freq_drop_width=8 // 2, freq_stripes_num=2
+        )
+
+        self.bn0 = nn.BatchNorm2d(self.cfg.n_mels)
+        self.encoder = timm.create_model(
+            base_model_name,
+            in_chans=self.cfg.in_chans,
+            pretrained=pretrained,
+            drop_path_rate=self.cfg.drop_path,
+        )
+
+        in_features = self.encoder.num_features
+        self.encoder.reset_classifier(0, "")
+        self.fc = nn.Linear(in_features, num_classes)
+
+    def compute_melspec(self, y):
+        return self.amp_db_tran(self.mel_trans(y)).float()
+
+    def forward(self, waveform, targets=None, do_mixup=False, weights=None):
+        # (batch_size, len_audio)
+        with autocast(enabled=False):
+            with torch.no_grad():
+                x = self.compute_melspec(waveform)
+                x = x.unsqueeze(1)
+                # melspec + d1 + d2
+                delta1 = AF.compute_deltas(x)
+                delta2 = AF.compute_deltas(delta1)
+                x = torch.cat([x, delta1, delta2], 1)
+                _min, _max = x.amin(dim=(2, 3), keepdim=True), x.amax(dim=(2, 3), keepdim=True)
+                x = x.transpose(2, 3)
+                x = (x - _min) / (_max - _min)
+                if self.training and do_mixup:
+                    if np.random.rand() < 0.5:
+                        x, targets = mixup(x, targets, self.cfg.mixup_alpha, weights=weights)
+                    else:
+                        x, targets = cutmix(x, targets, self.cfg.mixup_alpha, weights=weights)
+
+        pad_h = int(np.ceil(x.shape[2] / self._divisor)) * self._divisor
+        pad = (0, 0, 0, max(pad_h - x.shape[2], 0))
+        x = F.pad(x, pad, "constant", 0)
+        bs, c, h, w = x.shape
+        x = (
+            x.reshape(bs, c, self._divisor, h // self._divisor, w)
+            .permute(0, 2, 1, 3, 4)
+            .flatten(0, 1)
+        )
+        x = x.transpose(1, 3)  # (batch_size, mel_bins, time_steps, 3)
+        x = self.bn0(x)
+        x = x.transpose(1, 3)  # (batch_size, 3, time_steps, mel_bins)
+        if self.training:
+            if np.random.random() < 0.25:
+                x = self.spec_augmenter(x)
+
+        x = self.encoder(x)
+        x = x.reshape(bs, self._divisor, x.shape[1], x.shape[2], x.shape[3])
+        x = x.mean((1, 3, 4))
+        logit = self.fc(x)
+        clipwise_output = torch.sigmoid(logit)
+        output_dict = {
+            "clipwise_output": clipwise_output,  # (n_samples, n_class)
+            "logit": logit,  # (n_samples, n_class)
+        }
+
+        if self.training:
+            if do_mixup:
+                loss = loss_module.mixup_criterion(output_dict["logit"], targets, self._loss_fn)
+            else:
+                loss = self._loss_fn(output_dict["logit"], targets)
+                if weights is not None:
+                    loss = (loss * weights.unsqueeze(-1)).sum(0) / weights.sum()
+                loss = loss.mean()
+        else:
+            loss = self._loss_fn(output_dict["logit"], targets)
+            loss = loss.mean()
+        output_dict["loss"] = loss
+        return output_dict
+
+
 class TimmSED(nn.Module):
     def __init__(self, base_model_name: str, cfg, pretrained=False, num_classes=24):
         super().__init__()
