@@ -52,6 +52,11 @@ class TimmSED(nn.Module):
     def __init__(self, base_model_name: str, cfg, pretrained=False, num_classes=24):
         super().__init__()
         self.cfg = cfg
+        self.loss_name = cfg.loss_name
+        if self.loss_name == "FocalLoss":
+            self.loss_kwargs = cfg.focal_kwargs
+        elif self.loss_name == "AsymmetricLoss":
+            self.loss_kwargs = cfg.asym_kwargs
 
         self.mel_trans = MelSpectrogram(
             sample_rate=self.cfg.sample_rate,
@@ -70,7 +75,10 @@ class TimmSED(nn.Module):
         self.bn0 = nn.BatchNorm2d(self.cfg.n_mels)
 
         self.encoder = timm.create_model(
-            base_model_name, in_chans=self.cfg.in_chans, pretrained=pretrained
+            base_model_name,
+            in_chans=self.cfg.in_chans,
+            pretrained=pretrained,
+            drop_path_rate=self.cfg.drop_path,
         )
 
         in_features = self.encoder.num_features
@@ -154,8 +162,16 @@ class TimmSED(nn.Module):
         loss = None
         if targets is not None:
             if do_mixup:
-                loss = mixup_criterion(output_dict["logit"], targets)
+                loss = mixup_criterion(
+                    output_dict["logit"], targets, self.loss_name, **self.loss_kwargs
+                )
             else:
-                loss = loss_fn(output_dict["logit"], targets, weights=weights)
+                loss = loss_fn(
+                    output_dict["logit"],
+                    targets,
+                    loss_name=self.loss_name,
+                    weights=weights,
+                    **self.loss_kwargs
+                )
         output_dict["loss"] = loss
         return output_dict

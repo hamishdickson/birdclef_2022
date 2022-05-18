@@ -22,17 +22,25 @@ class CFG:
     n_fft = 2048
     hop_length = 512
     sample_rate = 32000
-    in_chans = 1
+    in_chans = 3
 
     seed = 71
     label_smoothing = 0.0
     bg_blend_chance = (0.0,)
     bg_blend_alpha = (0.3, 0.6)
+
+    dropout = 0.5
+    drop_path = 0.2
+
+    loss_name = "FocalLoss"
+    focal_kwargs = {"alpha": 0.5, "gamma": 2.0}
+    asym_kwargs = {"gamma_neg": 2, "gamma_pos": 0}
+    weighted_by_rating = False
+
     epochs = 23
     cutmix_and_mixup_epochs = 18
     warmup_epochs = 3
     fold = 0  # [0, 1, 2, 3, 4]
-    dropout = 0.5
     grad_acc_steps = 1
     N_FOLDS = 5
     LR = 2 * 1e-3

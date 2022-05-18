@@ -23,11 +23,11 @@ def train_fn(
 
     for i, data in enumerate(tk0):
         optimizer.zero_grad()
-        inputs = data["audio"].to(device)
-        targets = data["targets"].to(device)
+        inputs = data["audio"].to(device, non_blocking=True)
+        targets = data["targets"].to(device, non_blocking=True)
         weights = None
         if "weights" in data.keys():
-            weights = data["weights"].to(device)
+            weights = data["weights"].to(device, non_blocking=True)
 
         with autocast(enabled=use_apex):
             outputs = model(inputs, targets=targets, do_mixup=do_mixup, weights=weights)

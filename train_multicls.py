@@ -24,7 +24,9 @@ def create_dataset(df, labels_df, mode, batch_size, nb_workers, shuffle):
         target_columns=CFG.target_columns,
         mode=mode,
         split_audio_root=CFG.split_audios_path,
+        label_smoothing=CFG.label_smoothing,
         bg_blend_chance=CFG.bg_blend_chance,
+        weighted_by_rating=CFG.weighted_by_rating,
     )
     dataloader = torch.utils.data.DataLoader(
         dataset,
@@ -75,6 +77,8 @@ def create_df():
         df[["new_target", "file_path"]], left_on="filepath", right_on="file_path", how="inner"
     )[["file_path", "new_target", "bird_pred", "seconds"]]
     labels_df = labels_df.set_index("file_path")
+    # df["weight"] = df.groupby("primary_label")["primary_label"].transform("count")
+    # df["weight"] = 1 / np.log1p(df["weight"])
     return df, labels_df
 
 
@@ -139,6 +143,14 @@ if __name__ == "__main__":
     parser.add_argument("--gd", type=int, default=1, help="gradient accumulation steps")
     parser.add_argument("--wd", type=float, default=1e-4, help="weight decay")
     parser.add_argument("--base-model", type=str, help="timm backbone")
+    parser.add_argument("--dp", type=float, default=0.0, help="drop path rate")
+    parser.add_argument("--loss", type=str, default="FocalLoss", help="loss function")
+    parser.add_argument(
+        "--wbr",
+        dest="wbr",
+        help="Weigh samples by rating",
+        action="store_true",
+    )
     args = parser.parse_args()
     print(args)
 
@@ -150,6 +162,9 @@ if __name__ == "__main__":
     CFG.train_bs = args.train_bs
     CFG.grad_acc_steps = args.gd
     CFG.base_model_name = args.base_model
+    CFG.drop_path = args.dp
+    CFG.loss_name = args.loss
+    CFG.weighted_by_rating = args.wbr
 
     if args.multi_fold:
         folds = range(args.nb_folds)

@@ -105,6 +105,7 @@ class WaveformDataset(BinaryDataset):
         label_smoothing=0.0,
         bg_blend_chance=0.0,
         bg_blend_alpha=(0.3, 0.6),
+        weighted_by_rating=False,
     ):
         super().__init__(df, sr, duration, mode=mode)
         self.labels_df = labels_df
@@ -119,6 +120,8 @@ class WaveformDataset(BinaryDataset):
             self.binary_df = pd.read_csv("data/train_backgrounds.csv")
             self.binary_df = self.binary_df[self.binary_df.label == 0]
             print(f"Removed positive labels from binary df, new shape {len(self.binary_df)}")
+        if weighted_by_rating:
+            self.df["weight"] = self.df["rating"] / self.df["rating"].max()
 
     def __getitem__(self, idx: int):
         sample = self.df.loc[idx, :]
@@ -141,7 +144,6 @@ class WaveformDataset(BinaryDataset):
         if len(y) > 0 and self.wave_transforms:
             with AUGTIMER:
                 y = self.wave_transforms(y, sr=self.sr)
-        #                 print("after transform: ", y.shape)
 
         y = crop_or_pad(
             y,
@@ -150,7 +152,6 @@ class WaveformDataset(BinaryDataset):
             train=self.mode == "train",
             probs=None,
         )
-        #         print("after croppad: ", y.shape)
 
         if self.mode == "train" and np.random.random() < self.bg_blend_chance:
             bin_path = self.binary_df.sample(n=1).iloc[0]["filepath"]
