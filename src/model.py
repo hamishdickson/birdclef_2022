@@ -3,6 +3,7 @@ import timm
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchaudio.functional as AF
 from torch.cuda.amp import autocast
 from torchaudio.transforms import AmplitudeToDB, MelSpectrogram
 from torchlibrosa.augmentation import SpecAugmentation
@@ -92,17 +93,20 @@ class TimmSED(nn.Module):
         with autocast(enabled=False):
             with torch.no_grad():
                 x = self.compute_melspec(waveform)
+                x = x.unsqueeze(1)
+                # melspec
+                # _min, _max = x.amin(dim=(1, 2, 3), keepdim=True), x.amax(
+                #     dim=(1, 2, 3), keepdim=True
+                # )
+                # melspec + d1 + d2
+                delta1 = AF.compute_deltas(x)
+                delta2 = AF.compute_deltas(delta1)
+                x = torch.cat([x, delta1, delta2], 1)
+                _min, _max = x.amin(dim=(2, 3), keepdim=True), x.amax(dim=(2, 3), keepdim=True)
+
                 frames_num = x.shape[2]
-                if self.cfg.in_chans == 3:
-                    x = mono_to_color(x).transpose(1, 3)  # (batch_size, 3, time_steps, mel_bins)
-                    x = x - self.cfg.mean
-                    x = x / self.cfg.std
-                else:
-                    x = x.unsqueeze(1).transpose(2, 3)
-                    _min, _max = x.amin(dim=(1, 2, 3), keepdim=True), x.amax(
-                        dim=(1, 2, 3), keepdim=True
-                    )
-                    x = (x - _min) / (_max - _min)
+                x = x.transpose(2, 3)
+                x = (x - _min) / (_max - _min)
 
                 if self.training and do_mixup:
                     if np.random.rand() < 0.5:
