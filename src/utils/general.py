@@ -59,13 +59,20 @@ def rand_bbox(size, lam):
     return bbx1, bby1, bbx2, bby2
 
 
-def cutmix(data, targets, alpha, weights=None):
+def cutmix(data, targets, alpha, weights=None, strong_targets=None):
+
     indices = torch.randperm(data.size(0))
     shuffled_targets = targets[indices]
+
     if weights is not None:
         shuffled_weights = weights[indices]
     else:
         shuffled_weights = None
+
+    if strong_targets is not None:
+        shuffled_strong_targets = strong_targets[indices]
+    else:
+        shuffled_strong_targets = None
 
     lam = np.random.beta(alpha, alpha)
     bbx1, bby1, bbx2, bby2 = rand_bbox(data.size(), lam)
@@ -79,18 +86,26 @@ def cutmix(data, targets, alpha, weights=None):
         "lambda": lam,
         "weights1": weights,
         "weights2": shuffled_weights,
+        "strong_targets1": strong_targets,
+        "strong_targets2": shuffled_strong_targets,
     }
     return data, new_targets
 
 
-def mixup(data, targets, alpha, weights=None):
+def mixup(data, targets, alpha, weights=None, strong_targets=None):
     indices = torch.randperm(data.size(0))
     shuffled_data = data[indices]
     shuffled_targets = targets[indices]
+
     if weights is not None:
         shuffled_weights = weights[indices]
     else:
         shuffled_weights = None
+
+    if strong_targets is not None:
+        shuffled_strong_targets = strong_targets[indices]
+    else:
+        shuffled_strong_targets = None
 
     lam = np.random.beta(alpha, alpha)
     new_data = data * lam + shuffled_data * (1 - lam)
@@ -101,5 +116,7 @@ def mixup(data, targets, alpha, weights=None):
         "lambda": lam,
         "weights1": weights,
         "weights2": shuffled_weights,
+        "strong_targets1": strong_targets,
+        "strong_targets2": shuffled_strong_targets,
     }
     return new_data, new_targets

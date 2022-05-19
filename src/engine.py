@@ -1,4 +1,3 @@
-import imp
 import time
 from pathlib import Path
 
@@ -24,12 +23,23 @@ def train_fn(model, data_loader, device, optimizer, scheduler, do_mixup=False, u
         optimizer.zero_grad()
         inputs = data["audio"].to(device)
         targets = data["targets"].to(device)
+
         weights = None
         if "weights" in data.keys():
             weights = data["weights"].to(device)
 
+        strong_targets = None
+        if "strong_targets" in data.keys():
+            strong_targets = data["strong_targets"].to(device)
+
         with autocast(enabled=use_apex):
-            outputs = model(inputs, targets=targets, do_mixup=do_mixup, weights=weights)
+            outputs = model(
+                inputs,
+                targets=targets,
+                strong_targets=strong_targets,
+                do_mixup=do_mixup,
+                weights=weights,
+            )
             loss = outputs["loss"]
 
         scaler.scale(loss).backward()
@@ -38,16 +48,26 @@ def train_fn(model, data_loader, device, optimizer, scheduler, do_mixup=False, u
 
         scheduler.step()
         losses.update(loss.item(), inputs.size(0))
-        scores.update(targets, outputs["clipwise_output"], mask=data.get("is_scored"))
+        scores.update(targets, outputs["clipwise_output"])
         tk0.set_postfix(loss=losses.avg)
-    return scores.avg, losses.avg
+    return scores.evaluate(), losses.avg
 
 
-def valid_fn(model, data_loader, device, loss_meter=None, score_meter=None):
+def valid_fn(
+    model,
+    data_loader,
+    device,
+    loss_meter=None,
+    score_meter=None,
+    frame_score_meter=None,
+    eval_frame=False,
+):
     if loss_meter is None:
         loss_meter = AverageMeter()
     if score_meter is None:
         score_meter = MetricMeter()
+    if frame_score_meter is None:
+        frame_score_meter = MetricMeter()
 
     model.eval()
     tk0 = tqdm(data_loader, total=len(data_loader))
@@ -56,11 +76,41 @@ def valid_fn(model, data_loader, device, loss_meter=None, score_meter=None):
             inputs = data["audio"].to(device)
             targets = data["targets"].to(device)
             outputs = model(inputs)
-            loss = loss_fn(outputs["logit"], targets)
+            loss = loss_fn(outputs, targets)
             loss_meter.update(loss.item(), inputs.size(0))
-            score_meter.update(targets, outputs["clipwise_output"], mask=data.get("is_scored"))
+            score_meter.update(targets, outputs["clipwise_output"])
+            if eval_frame:
+                val_pred_ix = data["val_pred_ix"].to(device)
+                val_pred_ix = val_pred_ix.repeat_interleave(targets.shape[1]).view(*targets.shape)
+                frame_score_meter.update(
+                    targets,
+                    torch.gather(
+                        outputs["framewise_output"], dim=-1, index=val_pred_ix[..., None]
+                    ).squeeze(-1),
+                )
+
             tk0.set_postfix(loss=loss_meter.avg)
-    return score_meter, loss_meter
+    return {"score": score_meter, "loss": loss_meter, "frame_score": frame_score_meter}
+
+
+def inference_fn(model, data_loader, device, max_inf_size=200):
+    model.eval()
+    tk0 = tqdm(data_loader, total=len(data_loader))
+    metadata = []
+    probs = []
+    with torch.no_grad():
+        for z, data in enumerate(tk0):
+            # if z > 10: break
+            bz = data["audio"].shape[0]
+            nb_steps = int(np.ceil(bz / max_inf_size))
+            for step in range(nb_steps):
+                inputs = data["audio"][step * max_inf_size : (step + 1) * max_inf_size].to(device)
+                df_rows = data["df_rows"][step * max_inf_size : (step + 1) * max_inf_size]
+                prob = model(inputs)["clipwise_output"].cpu().numpy()
+                # print(bz, nb_steps, step, prob.shape)
+                probs.extend(prob.tolist())
+                metadata.extend(df_rows)
+    return metadata, probs
 
 
 class Trainer:
@@ -131,9 +181,11 @@ class Trainer:
                 use_apex=self.cfg.apex,
             )
 
-            valid_avg, valid_loss = valid_fn(model, valid_dataloader, self.device)
-            valid_loss = valid_loss.avg
-            valid_avg = valid_avg.avg
+            valid_results = valid_fn(
+                model, valid_dataloader, self.device, eval_frame=self.cfg.period > 5
+            )
+            valid_loss = valid_results["loss"].avg
+            valid_avg = valid_results["score"].evaluate()
 
             elapsed = time.time() - start_time
 
@@ -148,6 +200,11 @@ class Trainer:
                 else:
                     print(
                         f"Epoch {epoch + 1} - train_{key}:{train_avg[key]:0.5f}  valid_{key}:{valid_avg[key]:0.5f}"
+                    )
+                if self.cfg.period > 5:
+                    frame_avg = valid_results["frame_score"].evaluate()
+                    print(
+                        f"Epoch {epoch + 1} - frame_valid_{key.replace('best', str(frame_avg[key][0]))}:{frame_avg[key][1]:0.5f}"
                     )
 
             new_best = valid_avg.get("masked_f1_at_best", valid_avg["f1_at_best"])[1]
