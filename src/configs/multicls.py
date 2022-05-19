@@ -5,7 +5,7 @@ import torch
 
 
 class CFG:
-    exp_name = "dur20_20sval"  # this goes to the save filename
+    exp_name = "dur20_temp10_headv3_maxpool"  # this goes to the save filename
     output_dir = "../exp/multiclass/"
 
     audios_path = "/media/nvme/Datasets/bird/2022/train_audio/*/*.ogg"
@@ -22,7 +22,7 @@ class CFG:
     fold = 0  # [0, 1, 2, 3, 4]
     dropout = 0.5
     N_FOLDS = 5
-    LR = 2 * 1e-3
+    LR = 1 * 1e-3
     ETA_MIN = 1e-6
 
     WEIGHT_DECAY = 1e-6
@@ -32,12 +32,13 @@ class CFG:
     bg_blend_chance = 0.0
     bg_blend_alpha = (0.3, 0.6)
 
-    focal_alpha = 1.0
-    focal_gamma = 1.0
+    focal_alpha = 0.5
+    focal_gamma = 2.0
+    framewise_weight = 1.0
 
-    train_bs = 32  # 32
-    valid_bs = 32  # 64
-    base_model_name = "tf_efficientnet_b0_ns"
+    train_bs = 16  # 32
+    valid_bs = 16  # 64
+    base_model_name = "tf_efficientnet_b3_ns"
     starting_weights = None  # "fold-0-b3-779.bin"
     load_up_to_layer = None  # 1
     apex = True

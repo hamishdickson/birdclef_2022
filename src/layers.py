@@ -100,9 +100,8 @@ class AttBlockV2(nn.Module):
         # x: (n_samples, n_in, n_time)
         norm_att = torch.softmax(torch.tanh(self.att(x)), dim=-1)
         cla = self.cla(x)
-        logit = torch.sum(norm_att * cla, dim=2)
-        pred = logit.sigmoid()
-        return pred, logit
+        logit = norm_att * cla
+        return logit
 
     def nonlinear_transform(self, x):
         if self.activation == "linear":

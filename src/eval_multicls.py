@@ -65,8 +65,8 @@ def eval_kfold(model_paths):
             device=device,
             eval_frame=CFG.period > 5,
         )
-    # clip_results = results["score"].evaluate(optim=True)
-    # print("Clip results:", clip_results)
+    clip_results = results["score"].evaluate(optim=True)
+    print("Clip results:", clip_results)
     frame_results = results["frame_score"].evaluate(optim=True)
     print("Frame results:", frame_results)
     # print(
@@ -118,11 +118,11 @@ if __name__ == "__main__":
     # b7 lb75 fixed_norm_first_channel_drop5_blend_chance80_alpha30 {'f1_at_best': (0.11, 0.8955411999778985), 'masked_best_ths_per_bird': {'akiapo': 0.13, 'aniani': 0.060000000000000005, 'apapan': 0.12, 'barpet': 0.18000000000000002, 'crehon': 0.05, 'elepai': 0.08, 'ercfra': 0.08, 'hawama': 0.16, 'hawcre': 0.18000000000000002, 'hawgoo': 0.18000000000000002, 'hawhaw': 0.01, 'hawpet1': 0.05, 'houfin': 0.21000000000000002, 'iiwi': 0.12, 'jabwar': 0.14, 'maupar': 0.29000000000000004, 'omao': 0.12, 'puaioh': 0.03, 'skylar': 0.19, 'warwhe1': 0.16, 'yefcan': 0.11}, 'masked_best_score_per_bird': {'akiapo': 0.9934614088304685, 'aniani': 0.9586843701556919, 'apapan': 0.9601939295172133, 'barpet': 0.9656893801532205, 'crehon': 0.9794949494949494, 'elepai': 0.9138390783934804, 'ercfra': 0.9869998652835781, 'hawama': 0.9724087165961786, 'hawcre': 0.9962236158877875, 'hawgoo': 0.9985850010107136, 'hawhaw': 0.7605562664152468, 'hawpet1': 0.9733652097784362, 'houfin': 0.9139487845178278, 'iiwi': 0.9655858134248596, 'jabwar': 0.93281107608187, 'maupar': 0.49993266446703927, 'omao': 0.9744026769820058, 'puaioh': 0.9395245471075493, 'skylar': 0.9586424480597007, 'warwhe1': 0.9260492137157357, 'yefcan': 0.9430348412345948}, 'masked_optimised_global_score': 0.9292111360527691}
 
     model_paths = {
-        0: "/media/hdd/Kaggle/bird/exp/multiclass/05-16-22-19:08:45-dur20_20sval/fold-0-tf_efficientnet_b0_ns-dur20_20sval-epoch-14-f1-0.954-0.932.bin",
-        1: "/media/hdd/Kaggle/bird/exp/multiclass/05-16-22-20:01:53-dur20_20sval/fold-1-tf_efficientnet_b0_ns-dur20_20sval-epoch-10-f1-0.885-0.920.bin",
-        2: "/media/hdd/Kaggle/bird/exp/multiclass/05-16-22-20:54:28-dur20_20sval/fold-2-tf_efficientnet_b0_ns-dur20_20sval-epoch-21-f1-0.919-0.919.bin",
-        3: "/media/hdd/Kaggle/bird/exp/multiclass/05-16-22-21:47:01-dur20_20sval/fold-3-tf_efficientnet_b0_ns-dur20_20sval-epoch-11-f1-0.927-0.920.bin",
-        4: "/media/hdd/Kaggle/bird/exp/multiclass/05-16-22-22:39:16-dur20_20sval/fold-4-tf_efficientnet_b0_ns-dur20_20sval-epoch-0-f1-0.721-0.739.bin",
+        0: "/media/hdd/Kaggle/bird/exp/multiclass/05-18-22-10:21:25-dur20_temp10_headv2_maxpool/fold-0-tf_efficientnet_b3_ns-dur20_temp10_headv2_maxpool-epoch-16-f1-0.947-0.929.bin",
+        1: "/media/hdd/Kaggle/bird/exp/multiclass/05-18-22-11:49:46-dur20_temp10_headv2_maxpool/fold-1-tf_efficientnet_b3_ns-dur20_temp10_headv2_maxpool-epoch-19-f1-0.897-0.924.bin",
+        2: "/media/hdd/Kaggle/bird/exp/multiclass/05-18-22-13:18:14-dur20_temp10_headv2_maxpool/fold-2-tf_efficientnet_b3_ns-dur20_temp10_headv2_maxpool-epoch-8-f1-0.946-0.914.bin",
+        3: "/media/hdd/Kaggle/bird/exp/multiclass/05-18-22-14:46:43-dur20_temp10_headv2_maxpool/fold-3-tf_efficientnet_b3_ns-dur20_temp10_headv2_maxpool-epoch-21-f1-0.982-0.939.bin",
+        4: "/media/hdd/Kaggle/bird/exp/multiclass/05-18-22-16:15:01-dur20_temp10_headv2_maxpool/fold-4-tf_efficientnet_b3_ns-dur20_temp10_headv2_maxpool-epoch-20-f1-0.905-0.928.bin",
     }
 
     eval_kfold(model_paths)

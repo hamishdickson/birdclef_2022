@@ -266,7 +266,7 @@ def cvt_multiple_clips_to_array(
     duration,
     split_audio_root,
     target_columns,
-    temperature=1,
+    temperature=10,
     is_val=False,
     labels_df=None,
 ):
@@ -295,8 +295,8 @@ def cvt_multiple_clips_to_array(
         birds_idx = [target_columns.index(x) for x in birds]
         mask[i, birds_idx] = 1
     probs = probs / probs.max(axis=0, keepdims=True)
+    probs = 1 / (1 + np.exp(-temperature * (probs - 0.5)))
     probs = probs * mask
-    probs = probs ** (1 / temperature)
     probs = torch.from_numpy(probs).float().permute(1, 0)  # 152 x 4
 
     clips = []

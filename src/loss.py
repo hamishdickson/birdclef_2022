@@ -22,7 +22,7 @@ class FocalLoss(nn.Module):
         return loss
 
 
-def mixup_criterion(logits, new_targets, framewise_weight=1):
+def mixup_criterion(logits, new_targets, framewise_weight=CFG.framewise_weight):
     clipwise_logit, framewise_logit = logits["logit"], logits["framewise_logit"]
 
     targets1, targets2, lam, weights1, weights2, strong_targets1, strong_targets2 = (
@@ -51,7 +51,9 @@ def mixup_criterion(logits, new_targets, framewise_weight=1):
     return clipwise_loss + framewise_weight * framewise_loss
 
 
-def loss_fn(logits, targets, weights=None, strong_targets=None, framewise_weight=1):
+def loss_fn(
+    logits, targets, weights=None, strong_targets=None, framewise_weight=CFG.framewise_weight
+):
     clipwise_logit, framewise_logit = logits["logit"], logits["framewise_logit"]
     loss_fct = FocalLoss(alpha=CFG.focal_alpha, gamma=CFG.focal_gamma)
 
