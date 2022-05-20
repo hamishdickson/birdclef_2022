@@ -106,7 +106,7 @@ class Trainer:
             print(f"Loaded weights from {self.cfg.starting_weights}")
             print(loaded_keys)
 
-        optimizer = transformers.AdamW(
+        optimizer = torch.optim.AdamW(
             model.parameters(), lr=self.cfg.LR, weight_decay=self.cfg.WEIGHT_DECAY
         )
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(

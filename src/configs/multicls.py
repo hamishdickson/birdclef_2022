@@ -34,7 +34,7 @@ class CFG:
 
     train_bs = 32  # 32
     valid_bs = 32  # 64
-    base_model_name = "tf_efficientnet_b3_ns"
+    base_model_name = "tf_efficientnet_b3_ns" #tf_efficientnetv2_m_in21k   tf_efficientnet_b5_ns
     starting_weights = None  # "fold-0-b3-779.bin"
     load_up_to_layer = None  # 1
     apex = True

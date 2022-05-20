@@ -69,7 +69,7 @@ class TimmSED(nn.Module):
         super().__init__()
         self.cfg = cfg
 
-        self.mel_trans_power = MelSpectrogram(
+        self.mel_trans = MelSpectrogram(
             sr=self.cfg.sample_rate,
             n_fft=self.cfg.n_fft,
             hop_length=self.cfg.hop_length,
@@ -77,26 +77,38 @@ class TimmSED(nn.Module):
             fmax=self.cfg.fmax,
             n_mels=self.cfg.n_mels,
             power=2.0,
-            trainable_mel=True,
-            trainable_STFT=True
+            # trainable_mel=True,
+            # trainable_STFT=True
         )
 
-        self.mel_trans_energy = MelSpectrogram(
-            sr=self.cfg.sample_rate,
-            n_fft=self.cfg.n_fft,
-            hop_length=self.cfg.hop_length,
-            fmin=self.cfg.fmin,
-            fmax=self.cfg.fmax,
-            n_mels=self.cfg.n_mels,
-            power=1.0,
-            trainable_mel=True,
-            trainable_STFT=True
-        )
+        # self.mel_trans_power = MelSpectrogram(
+        #     sr=self.cfg.sample_rate,
+        #     n_fft=self.cfg.n_fft,
+        #     hop_length=self.cfg.hop_length,
+        #     fmin=self.cfg.fmin,
+        #     fmax=self.cfg.fmax,
+        #     n_mels=self.cfg.n_mels,
+        #     power=2.0,
+        #     trainable_mel=True,
+        #     trainable_STFT=True
+        # )
+
+        # self.mel_trans_energy = MelSpectrogram(
+        #     sr=self.cfg.sample_rate,
+        #     n_fft=self.cfg.n_fft,
+        #     hop_length=self.cfg.hop_length,
+        #     fmin=self.cfg.fmin,
+        #     fmax=self.cfg.fmax,
+        #     n_mels=self.cfg.n_mels,
+        #     power=1.0,
+        #     trainable_mel=True,
+        #     trainable_STFT=True
+        # )
 
 
-        # self.pcen_trans = PCENTransform(eps=1E-6, s=0.025, alpha=0.6, delta=0.1, r=0.2, trainable=True)
+        self.pcen_trans = PCENTransform(eps=1E-6, s=0.025, alpha=0.6, delta=0.1, r=0.2, trainable=True)
 
-        self.amp_db_tran = AmplitudeToDB()
+        # self.amp_db_tran = AmplitudeToDB()
 
         self.spec_augmenter = SpecAugmentation(
             time_drop_width=64 // 2, time_stripes_num=2, freq_drop_width=8 // 2, freq_stripes_num=2
@@ -122,7 +134,7 @@ class TimmSED(nn.Module):
         return self.amp_db_tran(self.mel_trans_power(y)).float()
 
     def compute_melspec_multi_channel(self, y):
-        return (self.amp_db_tran(self.mel_trans_power(y)).float(), self.amp_db_tran(self.mel_trans_energy(y)).float(), self.amp_db_tran(self.mel_trans_power(y)).float())
+        return (self.pcen_trans(self.mel_trans(y)).float(), self.pcen_trans(self.mel_trans(y)).float(), self.pcen_trans(self.mel_trans(y)).float())
 
     def init_weight(self):
         init_bn(self.bn0)
@@ -185,3 +197,16 @@ class TimmSED(nn.Module):
                 loss = loss_fn(output_dict["logit"], targets, weights=weights)
         output_dict["loss"] = loss
         return output_dict
+
+# tf_efficientnetv2_m_in21k
+
+
+        # x = self.framewise_pool(x)
+        # x = F.dropout(x, p=self.cfg.dropout, training=self.training)
+        # logit = self.framewise_cls(x)
+        # clipwise_output = logit.sigmoid()
+
+        # output_dict = {
+        #     "clipwise_output": clipwise_output.squeeze(-1),  # (n_samples, n_class)
+        #     "logit": logit.squeeze(-1),  # (n_samples, n_class)
+        # }
