@@ -106,6 +106,7 @@ class WaveformDataset(BinaryDataset):
         bg_blend_chance=0.0,
         bg_blend_alpha=(0.3, 0.6),
         weighted_by_rating=False,
+        sampling="random",
     ):
         super().__init__(df, sr, duration, mode=mode)
         self.labels_df = labels_df
@@ -123,6 +124,11 @@ class WaveformDataset(BinaryDataset):
         self.df["weight"] = 1.0
         if weighted_by_rating:
             self.df["weight"] = self.df["rating"] / self.df["rating"].max()
+        assert sampling in [
+            "random",
+            "birdcall",
+        ], "Audio clip sampling must be one of ['random', 'birdcall']"
+        self.sampling = sampling
 
     def __getitem__(self, idx: int):
         sample = self.df.loc[idx, :]
@@ -133,14 +139,24 @@ class WaveformDataset(BinaryDataset):
         is_scored = sample["is_scored"]
 
         with LOADTIMER:
-            y = cvt_audio_to_array_v2(
-                wav_path,
-                labels_df=self.labels_df,
-                target_sr=self.sr,
-                duration=self.duration,
-                use_highest=self.mode != "train",
-                split_audio_root=self.split_audio_root,
-            )
+            if self.sampling == "birdcall":
+                y = cvt_audio_to_array(
+                    wav_path,
+                    labels_df=self.labels_df,
+                    target_sr=self.sr,
+                    duration=self.duration,
+                    use_highest=self.mode != "train",
+                    split_audio_root=self.split_audio_root,
+                )
+            elif self.sampling == "random":
+                y = cvt_audio_to_array_v2(
+                    wav_path,
+                    labels_df=self.labels_df,
+                    target_sr=self.sr,
+                    duration=self.duration,
+                    use_highest=self.mode != "train",
+                    split_audio_root=self.split_audio_root,
+                )
 
         if len(y) > 0 and self.wave_transforms:
             with AUGTIMER:

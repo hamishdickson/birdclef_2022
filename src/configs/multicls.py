@@ -23,6 +23,10 @@ class CFG:
     hop_length = 512
     sample_rate = 32000
     in_chans = 3
+    mean = torch.from_numpy(np.array([0.485, 0.456, 0.406])).float()[None, :, None, None]  # RGB
+    std = torch.from_numpy(np.array([0.229, 0.224, 0.225])).float()[None, :, None, None]  # RG
+    melspec_type = "color"
+    sampling = "random"
 
     seed = 71
     label_smoothing = 0.0
@@ -58,10 +62,6 @@ class CFG:
     load_up_to_layer = None  # 1
     apex = True
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-
-    mean = torch.from_numpy(np.array([0.485, 0.456, 0.406])).float()[None, :, None, None]  # RGB
-    std = torch.from_numpy(np.array([0.229, 0.224, 0.225])).float()[None, :, None, None]  # RG
-    melspec_type = "color"
 
     pretrained = True
     num_classes = 152

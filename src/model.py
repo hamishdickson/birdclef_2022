@@ -1,11 +1,10 @@
-from base64 import encode
-
 import numpy as np
 import timm
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchaudio.functional as AF
+from nnAudio import Spectrogram
 from torch.cuda.amp import autocast
 from torchaudio.transforms import AmplitudeToDB, MelSpectrogram
 from torchlibrosa.augmentation import SpecAugmentation
@@ -162,6 +161,9 @@ class TimmSED(nn.Module):
         super().__init__()
         self.cfg = cfg
         loss_name = cfg.loss_name
+        mel_type = cfg.melspec_type
+        assert mel_type in ["delta", "color", "power", "mono"]
+
         if loss_name == "FocalLoss":
             self._loss_fn = build_loss_fn(loss_name, **cfg.focal_kwargs)
         elif loss_name == "AsymmetricLoss":
@@ -170,14 +172,38 @@ class TimmSED(nn.Module):
         self.register_buffer("mean", cfg.mean, persistent=False)
         self.register_buffer("std", cfg.std, persistent=False)
 
-        self.mel_trans = MelSpectrogram(
-            sample_rate=self.cfg.sample_rate,
-            n_fft=self.cfg.n_fft,
-            hop_length=self.cfg.hop_length,
-            f_min=self.cfg.fmin,
-            f_max=self.cfg.fmax,
-            n_mels=self.cfg.n_mels,
-        )
+        if mel_type == "power":
+            self.mel_trans_power = Spectrogram.MelSpectrogram(
+                sr=self.cfg.sample_rate,
+                n_fft=self.cfg.n_fft,
+                hop_length=self.cfg.hop_length,
+                fmin=self.cfg.fmin,
+                fmax=self.cfg.fmax,
+                n_mels=self.cfg.n_mels,
+                power=2.0,
+                trainable_mel=True,
+                trainable_STFT=True,
+            )
+            self.mel_trans_energy = Spectrogram.MelSpectrogram(
+                sr=self.cfg.sample_rate,
+                n_fft=self.cfg.n_fft,
+                hop_length=self.cfg.hop_length,
+                fmin=self.cfg.fmin,
+                fmax=self.cfg.fmax,
+                n_mels=self.cfg.n_mels,
+                power=1.0,
+                trainable_mel=True,
+                trainable_STFT=True,
+            )
+        else:
+            self.mel_trans = MelSpectrogram(
+                sample_rate=self.cfg.sample_rate,
+                n_fft=self.cfg.n_fft,
+                hop_length=self.cfg.hop_length,
+                f_min=self.cfg.fmin,
+                f_max=self.cfg.fmax,
+                n_mels=self.cfg.n_mels,
+            )
         self.amp_db_tran = AmplitudeToDB()
 
         self.spec_augmenter = SpecAugmentation(
@@ -206,22 +232,40 @@ class TimmSED(nn.Module):
     def compute_melspec(self, y):
         return self.amp_db_tran(self.mel_trans(y)).float()
 
-    def preprocess_melspec(self, x: torch.Tensor, type="color"):
-        if type == "color":
-            x = mono_to_color(x)
+    def compute_melspec_multi_channel(self, y):
+        return torch.stack(
+            (
+                self.amp_db_tran(self.mel_trans_power(y)).float(),
+                self.amp_db_tran(self.mel_trans_energy(y)).float(),
+                self.amp_db_tran(self.mel_trans_power(y)).float(),
+            ),
+            1,
+        )
+
+    def preprocess_audio(self, waveform: torch.Tensor, type="color"):
+        if type == "power":
+            x = self.compute_melspec_multi_channel(waveform)
+            _min, _max = x.amin(dim=(1, 2, 3), keepdim=True), x.amax(dim=(1, 2, 3), keepdim=True)
+            x = (x - _min) / (_max - _min)
             x = (x - self.mean) / self.std
         else:
-            x = x.unsqueeze(1)
-            if type == "delta":
+            x = self.compute_melspec(waveform)
+            if type == "color":
+                x = mono_to_color(x)
+                x = (x - self.mean) / self.std
+            elif type == "delta":
                 delta1 = AF.compute_deltas(x)
                 delta2 = AF.compute_deltas(delta1)
-                x = torch.cat([x, delta1, delta2], 1)
+                x = torch.stack([x, delta1, delta2], 1)
                 _min, _max = x.amin(dim=(2, 3), keepdim=True), x.amax(dim=(2, 3), keepdim=True)
+                x = (x - _min) / (_max - _min)
             elif type == "mono":
+                x = x.unsqueeze(1)
                 _min, _max = x.amin(dim=(1, 2, 3), keepdim=True), x.amax(
                     dim=(1, 2, 3), keepdim=True
                 )
-            x = (x - _min) / (_max - _min)
+                x = (x - _min) / (_max - _min)
+
         x = x.transpose(2, 3)
         return x
 
@@ -233,10 +277,8 @@ class TimmSED(nn.Module):
         # (batch_size, len_audio)
         with autocast(enabled=False):
             with torch.no_grad():
-                x = self.compute_melspec(waveform)
-                x = self.preprocess_melspec(
-                    x, self.cfg.melspec_type
-                )  # (batch_size, in_chans, time_steps, mel_bins)
+                # (batch_size, in_chans, time_steps, mel_bins)
+                x = self.preprocess_audio(waveform, self.cfg.melspec_type)
                 frames_num = x.shape[2]
                 if self.training and do_mixup:
                     if np.random.rand() < 0.5:
