@@ -77,9 +77,7 @@ class MetricMeter(object):
                 if scored_birds is not None and k not in scored_birds:
                     continue
                 scores_k = [
-                    cmp_competition_metric(
-                        np.array(y_true)[:, k, None], np.array(y_pred)[:, k, None] > x
-                    )
+                    cmp_competition_metric(y_true[:, k, None], y_pred[:, k, None] > x)
                     for x in self._ranges
                 ]
                 best_k = np.argmax(scores_k)
@@ -92,9 +90,7 @@ class MetricMeter(object):
             }
         else:
             scores = [
-                cmp_competition_metric(
-                    np.array(y_true), np.array(y_pred) > x, scored_classes=scored_birds
-                )
+                cmp_competition_metric(y_true, y_pred > x, scored_classes=scored_birds)
                 for x in self._ranges
             ]
             best = np.argmax(scores)
@@ -104,12 +100,14 @@ class MetricMeter(object):
 
     @property
     def avg(self):
-        scores = self.score(self.y_true, self.y_pred, optim=False)
+        # scores = self.score(self.y_true, self.y_pred, optim=False)
+        scores = {}
+        scored_birds = [CFG.target_columns.index(x) for x in CFG.scored_birds]
         scores_masked = self.score(
-            self.y_true,
-            self.y_pred,
-            scored_birds=[CFG.target_columns.index(x) for x in CFG.scored_birds],
-            optim=self._optimise_per_bird,
+            np.array(self.y_true),
+            np.array(self.y_pred),
+            scored_birds,
+            self._optimise_per_bird,
         )
         scores.update({f"masked_{k}": v for k, v in scores_masked.items()})
         return scores

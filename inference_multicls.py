@@ -33,6 +33,7 @@ def create_dataset(df, mode, batch_size, nb_workers):
     return dataset, dataloader
 
 
+@torch.no_grad()
 def inference_kfold(model_paths):
     df, _ = create_df()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -43,7 +44,7 @@ def inference_kfold(model_paths):
         print(f"Processing fold {fold}... {path}")
         val_df = df[df.kfold == fold].reset_index(drop=True)
 
-        _, valid_dataloader = create_dataset(val_df, "val", int(CFG.valid_bs / 4), CFG.nb_workers)
+        _, valid_dataloader = create_dataset(val_df, "val", 4, CFG.nb_workers)
 
         model = getattr(models, CFG.meta_model_name)(
             cfg=CFG,
@@ -60,10 +61,12 @@ def inference_kfold(model_paths):
         probs.extend(fold_probs)
     df = pd.DataFrame(metadata)
     probs = np.array(probs)
+    df.columns = ["filename", "new_target"]
     print(probs.shape)
     print(df.shape)
-    df["probs"] = probs.tolist()
-    df.to_csv(f"data/{CFG.base_model_name}_pseudo.csv", index=False)
+    torch.save({"df": df, "probs": probs}, CFG.base_model_name + "_" + CFG.exp_name + ".pth")
+    # df["probs"] = probs.tolist()
+    # df.to_csv(f"data/{CFG.base_model_name}_pseudo.csv", index=False)
 
 
 if __name__ == "__main__":

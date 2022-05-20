@@ -133,10 +133,11 @@ class TimmReshape(nn.Module):
 
         x = self.encoder(x)
         x = x.reshape(bs, self._divisor, x.shape[1], x.shape[2], x.shape[3])
-        x = x.mean((1, 3, 4))
-        logit = self.fc(x)
+        logit = self.fc(x.mean((1, 3, 4)))
         clipwise_output = torch.sigmoid(logit)
+        segmentwise_output = torch.sigmoid(self.fc(x.mean((3, 4))))
         output_dict = {
+            "segmentwise_output": segmentwise_output,
             "clipwise_output": clipwise_output,  # (n_samples, n_class)
             "logit": logit,  # (n_samples, n_class)
         }
@@ -150,7 +151,7 @@ class TimmReshape(nn.Module):
                     loss = (loss * weights.unsqueeze(-1)).sum(0) / weights.sum()
                 loss = loss.mean()
         else:
-            if targets:
+            if targets is not None:
                 loss = self._loss_fn(output_dict["logit"], targets)
                 loss = loss.mean()
             else:
@@ -335,7 +336,7 @@ class TimmSED(nn.Module):
                     loss = (loss * weights.unsqueeze(-1)).sum(0) / weights.sum()
                 loss = loss.mean()
         else:
-            if targets:
+            if targets is not None:
                 loss = self._loss_fn(output_dict["logit"], targets)
                 loss = loss.mean()
             else:

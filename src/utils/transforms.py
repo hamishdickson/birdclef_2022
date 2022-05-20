@@ -239,7 +239,7 @@ def sample_clip_start_from_df(path, labels_df, duration, use_highest=False):
                 sample = samples.sample(n=1, weights=samples["bird_pred"])
 
         end = int(sample.seconds)
-        start = end - duration
+        start = max(end - duration, 0)
     return start, end
 
 
@@ -247,6 +247,9 @@ def cvt_audio_to_array(
     path, labels_df, target_sr, duration, split_audio_root=None, use_highest=False
 ):
     start, end = sample_clip_start_from_df(path, labels_df, duration, use_highest=use_highest)
+    # import pdb
+
+    # pdb.set_trace()
     if split_audio_root is not None:
         new_path = osp.join(
             split_audio_root, "/".join(path.split("/")[-2:]).replace(".ogg", f"_{str(end)}.ogg")
