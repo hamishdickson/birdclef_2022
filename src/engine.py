@@ -64,6 +64,26 @@ def valid_fn(model, data_loader, device, loss_meter=None, score_meter=None):
     return score_meter, loss_meter
 
 
+def inference_fn(model, data_loader, device, max_inf_size=200):
+    model.eval()
+    tk0 = tqdm(data_loader, total=len(data_loader))
+    metadata = []
+    probs = []
+    with torch.no_grad():
+        for z, data in enumerate(tk0):
+            # if z > 10: break
+            bz = data["audio"].shape[0]
+            nb_steps = int(np.ceil(bz / max_inf_size))
+            for step in range(nb_steps):
+                inputs = data["audio"][step * max_inf_size : (step + 1) * max_inf_size].to(device)
+                df_rows = data["df_rows"][step * max_inf_size : (step + 1) * max_inf_size]
+                prob = model(inputs)["clipwise_output"].cpu().numpy()
+                # print(bz, nb_steps, step, prob.shape)
+                probs.extend(prob.tolist())
+                metadata.extend(df_rows)
+    return metadata, probs
+
+
 class Trainer:
     def __init__(self, cfg, device):
         self.cfg = cfg

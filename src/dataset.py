@@ -201,3 +201,66 @@ class WaveformDataset(BinaryDataset):
             "weights": weight,
             "is_scored": is_scored,
         }
+
+
+class InferenceWaveformDataset(BinaryDataset):
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        sr: int,
+        duration: float,
+        target_columns: list,
+        mode="train",
+    ):
+        super().__init__(df, sr, duration, mode=mode)
+        self.target_columns = target_columns
+
+    @staticmethod
+    def collate_fn(batch):
+        audios = []
+        rows = []
+        for sample in batch:
+            audios.extend(sample["audios"])
+            rows.extend(sample["df_rows"])
+        audios = torch.from_numpy(np.stack(audios, 0)).float()
+        return {"audio": audios, "df_rows": rows}
+
+    def __getitem__(self, idx: int):
+        sample = self.df.loc[idx, :]
+
+        wav_path = sample["file_path"]
+
+        with LOADTIMER:
+            y = load_audio(
+                wav_path,
+                target_sr=self.sr,
+            )
+
+        if len(y) > 0 and self.wave_transforms:
+            with AUGTIMER:
+                y = self.wave_transforms(y, sr=self.sr)
+
+        nb_chunks = int(np.ceil((len(y) / self.sr) / self.duration))
+        all_clips = []
+        all_rows = []
+        for i in range(nb_chunks):
+            clip = y[i * (self.sr * self.duration) : (i + 1) * (self.sr * self.duration)]
+
+            clip = crop_or_pad(
+                clip,
+                self.duration * self.sr,
+                sr=self.sr,
+                train=self.mode == "train",
+                probs=None,
+            )
+            clip = torch.from_numpy(clip).float()
+            all_clips.append(clip)
+
+            clip_row = sample.copy()
+            clip_row["duration"] = int((i + 1) * self.duration)
+            all_rows.append(clip_row)
+
+        return {
+            "audios": all_clips,
+            "df_rows": all_rows,
+        }

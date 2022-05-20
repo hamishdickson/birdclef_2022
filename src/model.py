@@ -150,8 +150,11 @@ class TimmReshape(nn.Module):
                     loss = (loss * weights.unsqueeze(-1)).sum(0) / weights.sum()
                 loss = loss.mean()
         else:
-            loss = self._loss_fn(output_dict["logit"], targets)
-            loss = loss.mean()
+            if targets:
+                loss = self._loss_fn(output_dict["logit"], targets)
+                loss = loss.mean()
+            else:
+                loss = None
         output_dict["loss"] = loss
         return output_dict
 
@@ -332,7 +335,10 @@ class TimmSED(nn.Module):
                     loss = (loss * weights.unsqueeze(-1)).sum(0) / weights.sum()
                 loss = loss.mean()
         else:
-            loss = self._loss_fn(output_dict["logit"], targets)
-            loss = loss.mean()
+            if targets:
+                loss = self._loss_fn(output_dict["logit"], targets)
+                loss = loss.mean()
+            else:
+                loss = None
         output_dict["loss"] = loss
         return output_dict

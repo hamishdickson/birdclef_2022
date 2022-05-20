@@ -1,5 +1,6 @@
 import ast
 import glob
+from argparse import ArgumentParser
 from pathlib import Path
 
 import numpy as np
@@ -13,6 +14,41 @@ from src.dataset import WaveformDataset
 from src.engine import Trainer
 from src.utils.general import set_seed
 from src.utils.metrics import MetricMeter
+
+parser = ArgumentParser()
+parser.add_argument("--multi-fold", action="store_true")
+parser.add_argument("--nb-folds", type=int, default=5)
+parser.add_argument("--fold", type=int, default=0)
+parser.add_argument("--exp-name", type=str, default="", help="experiment name")
+parser.add_argument("--nb-workers", type=int, default=8, help="number of dataloader workers")
+parser.add_argument("--ls", type=float, default=0.0, help="label smoothing")
+parser.add_argument("--bg-blend", type=float, default=0.0, help="add background audio")
+parser.add_argument("--train-bs", type=int, default=16, help="train batch size")
+parser.add_argument("--gd", type=int, default=1, help="gradient accumulation steps")
+parser.add_argument("--wd", type=float, default=1e-4, help="weight decay")
+parser.add_argument("--base-model", type=str, help="timm backbone")
+parser.add_argument("--meta-model", type=str, help="meta model", default="TimmSED")
+parser.add_argument("--dp", type=float, default=0.0, help="drop path rate")
+parser.add_argument("--loss", type=str, default="FocalLoss", help="loss function")
+parser.add_argument(
+    "--wbr",
+    dest="wbr",
+    help="Weigh samples by rating",
+    action="store_true",
+)
+parser.add_argument(
+    "--ccs-sampler",
+    dest="ccs_sampler",
+    help="apply class-count sensitive sampler",
+    action="store_true",
+)
+parser.add_argument("--in-chans", type=int, help="number of channels", default=3)
+parser.add_argument("--mel", type=str, help="melspec. type", default="delta")
+parser.add_argument("--per", type=int, default=30, help="clip length in seconds")
+parser.add_argument("--sampling", type=str, default="random", help="clip sampling method")
+parser.add_argument("--test-only", dest="test_only", help="Run inference", action="store_true")
+parser.add_argument("--device", type=str, help="Set device", default="cuda")
+args = parser.parse_args()
 
 
 def create_dataset(df, labels_df, mode, batch_size, nb_workers, shuffle):
@@ -104,19 +140,23 @@ def train_fold(trainer: Trainer, df: pd.DataFrame, labels_df: pd.DataFrame):
     return trainer.train(train_dataloader, valid_dataloader)
 
 
+def get_model_paths(output_dir: Path, base_model_name: str):
+    model_paths = [str(p) for p in output_dir.glob("*.bin") if base_model_name in str(p)]
+    fold2path = {}
+    for path in model_paths:
+        fold = int(path.split("/")[-1][5])
+        fold2path[fold] = path
+    return fold2path
+
+
 def main(args):
     trainer = Trainer(CFG, torch.device(args.device))
     df, labels_df = create_df()
 
     if args.test_only:
-        model_paths = [
-            str(p)
-            for p in Path(trainer._output_dir).glob("*.bin")
-            if CFG.base_model_name in str(p)
-        ]
+        model_paths = get_model_paths(trainer._output_dir, CFG.base_model_name)
         score = MetricMeter(optimise_per_bird=True, ranges=np.arange(0.01, 0.31, 0.01))
-        for path in model_paths:
-            fold = int(path.split("/")[-1][5])
+        for fold, path in model_paths.items():
             print(f"Processing fold {fold}...")
             val_df = df[df.kfold == fold].reset_index(drop=True)
             _, valid_dataloader = create_dataset(
@@ -136,45 +176,7 @@ def main(args):
     return
 
 
-if __name__ == "__main__":
-    from argparse import ArgumentParser
-
-    parser = ArgumentParser()
-    parser.add_argument("--multi-fold", action="store_true")
-    parser.add_argument("--nb-folds", type=int, default=5)
-    parser.add_argument("--fold", type=int, default=0)
-    parser.add_argument("--exp-name", type=str, default="", help="experiment name")
-    parser.add_argument("--nb-workers", type=int, default=8, help="number of dataloader workers")
-    parser.add_argument("--ls", type=float, default=0.0, help="label smoothing")
-    parser.add_argument("--bg-blend", type=float, default=0.0, help="add background audio")
-    parser.add_argument("--train-bs", type=int, default=16, help="train batch size")
-    parser.add_argument("--gd", type=int, default=1, help="gradient accumulation steps")
-    parser.add_argument("--wd", type=float, default=1e-4, help="weight decay")
-    parser.add_argument("--base-model", type=str, help="timm backbone")
-    parser.add_argument("--meta-model", type=str, help="meta model", default="TimmSED")
-    parser.add_argument("--dp", type=float, default=0.0, help="drop path rate")
-    parser.add_argument("--loss", type=str, default="FocalLoss", help="loss function")
-    parser.add_argument(
-        "--wbr",
-        dest="wbr",
-        help="Weigh samples by rating",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--ccs-sampler",
-        dest="ccs_sampler",
-        help="apply class-count sensitive sampler",
-        action="store_true",
-    )
-    parser.add_argument("--in-chans", type=int, help="number of channels", default=3)
-    parser.add_argument("--mel", type=str, help="melspec. type", default="delta")
-    parser.add_argument("--per", type=int, default=30, help="clip length in seconds")
-    parser.add_argument("--sampling", type=str, default="random", help="clip sampling method")
-    parser.add_argument("--test-only", dest="test_only", help="Run inference", action="store_true")
-    parser.add_argument("--device", type=str, help="Set device", default="cuda")
-    args = parser.parse_args()
-    print(args)
-
+def update_cfg(CFG, args):
     CFG.nb_workers = args.nb_workers
     CFG.fold = args.fold
     CFG.exp_name = args.exp_name
@@ -192,5 +194,10 @@ if __name__ == "__main__":
     CFG.melspec_type = args.mel
     CFG.period = args.per
     CFG.sampling = args.sampling
+    return CFG
 
+
+if __name__ == "__main__":
+    print(args)
+    CFG = update_cfg(CFG, args)
     main(args)
