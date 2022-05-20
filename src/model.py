@@ -1,3 +1,5 @@
+from base64 import encode
+
 import numpy as np
 import timm
 import torch
@@ -79,12 +81,14 @@ class TimmReshape(nn.Module):
         )
 
         self.bn0 = nn.BatchNorm2d(self.cfg.n_mels)
-        self.encoder = timm.create_model(
-            base_model_name,
-            in_chans=self.cfg.in_chans,
-            pretrained=pretrained,
-            drop_path_rate=self.cfg.drop_path,
-        )
+        encoder_kwargs = {
+            "model_name": base_model_name,
+            "in_chans": self.cfg.in_chans,
+            "pretrained": pretrained,
+        }
+        if "resnest" not in base_model_name:
+            encoder_kwargs.update({"drop_path_rate": self.cfg.drop_path})
+        self.encoder = timm.create_model(**encoder_kwargs)
 
         in_features = self.encoder.num_features
         self.encoder.reset_classifier(0, "")
@@ -163,6 +167,9 @@ class TimmSED(nn.Module):
         elif loss_name == "AsymmetricLoss":
             self._loss_fn = build_loss_fn(loss_name, **cfg.asym_kwargs)
 
+        self.register_buffer("mean", cfg.mean, persistent=False)
+        self.register_buffer("std", cfg.std, persistent=False)
+
         self.mel_trans = MelSpectrogram(
             sample_rate=self.cfg.sample_rate,
             n_fft=self.cfg.n_fft,
@@ -179,12 +186,14 @@ class TimmSED(nn.Module):
 
         self.bn0 = nn.BatchNorm2d(self.cfg.n_mels)
 
-        self.encoder = timm.create_model(
-            base_model_name,
-            in_chans=self.cfg.in_chans,
-            pretrained=pretrained,
-            drop_path_rate=self.cfg.drop_path,
-        )
+        encoder_kwargs = {
+            "model_name": base_model_name,
+            "in_chans": self.cfg.in_chans,
+            "pretrained": pretrained,
+        }
+        if "resnest" not in base_model_name:
+            encoder_kwargs.update({"drop_path_rate": self.cfg.drop_path})
+        self.encoder = timm.create_model(**encoder_kwargs)
 
         in_features = self.encoder.num_features
         self.encoder.reset_classifier(0, "")
@@ -197,6 +206,25 @@ class TimmSED(nn.Module):
     def compute_melspec(self, y):
         return self.amp_db_tran(self.mel_trans(y)).float()
 
+    def preprocess_melspec(self, x: torch.Tensor, type="color"):
+        if type == "color":
+            x = mono_to_color(x)
+            x = (x - self.mean) / self.std
+        else:
+            x = x.unsqueeze(1)
+            if type == "delta":
+                delta1 = AF.compute_deltas(x)
+                delta2 = AF.compute_deltas(delta1)
+                x = torch.cat([x, delta1, delta2], 1)
+                _min, _max = x.amin(dim=(2, 3), keepdim=True), x.amax(dim=(2, 3), keepdim=True)
+            elif type == "mono":
+                _min, _max = x.amin(dim=(1, 2, 3), keepdim=True), x.amax(
+                    dim=(1, 2, 3), keepdim=True
+                )
+            x = (x - _min) / (_max - _min)
+        x = x.transpose(2, 3)
+        return x
+
     def init_weight(self):
         init_bn(self.bn0)
         init_layer(self.fc1)
@@ -206,30 +234,19 @@ class TimmSED(nn.Module):
         with autocast(enabled=False):
             with torch.no_grad():
                 x = self.compute_melspec(waveform)
-                x = x.unsqueeze(1)
-                # melspec
-                # _min, _max = x.amin(dim=(1, 2, 3), keepdim=True), x.amax(
-                #     dim=(1, 2, 3), keepdim=True
-                # )
-                # melspec + d1 + d2
-                delta1 = AF.compute_deltas(x)
-                delta2 = AF.compute_deltas(delta1)
-                x = torch.cat([x, delta1, delta2], 1)
-                _min, _max = x.amin(dim=(2, 3), keepdim=True), x.amax(dim=(2, 3), keepdim=True)
-
+                x = self.preprocess_melspec(
+                    x, self.cfg.melspec_type
+                )  # (batch_size, in_chans, time_steps, mel_bins)
                 frames_num = x.shape[2]
-                x = x.transpose(2, 3)
-                x = (x - _min) / (_max - _min)
-
                 if self.training and do_mixup:
                     if np.random.rand() < 0.5:
                         x, targets = mixup(x, targets, self.cfg.mixup_alpha, weights=weights)
                     else:
                         x, targets = cutmix(x, targets, self.cfg.mixup_alpha, weights=weights)
 
-        x = x.transpose(1, 3)  # (batch_size, mel_bins, time_steps, 3)
+        x = x.transpose(1, 3)  # (batch_size, mel_bins, time_steps, in_chans)
         x = self.bn0(x)
-        x = x.transpose(1, 3)  # (batch_size, 3, time_steps, mel_bins)
+        x = x.transpose(1, 3)  # (batch_size, in_chans, time_steps, mel_bins)
 
         if self.training:
             if np.random.random() < 0.25:

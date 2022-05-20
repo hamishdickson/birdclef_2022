@@ -85,10 +85,7 @@ class Trainer:
             model, valid_dataloader, self.device, loss_meter, score_meter
         )
         elapsed = time.time() - start_time
-        print(
-            f"Time: {elapsed:.0f}s - avg_val_loss: {valid_loss.avg:.5f}"
-            f" - avg_val_score: {valid_score.avg:.5f}"
-        )
+        print(f"Time: {elapsed:.0f}s - avg_val_loss: {valid_loss.avg:.5f}")
         return valid_score
 
     def train(self, train_dataloader, valid_dataloader):

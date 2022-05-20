@@ -336,7 +336,7 @@ def mono_to_color(X, eps=1e-6):
         numpy array [3 x H x W] -- RGB numpy array
     """
     X = X.float()
-    X = torch.stack([X, X, X], axis=-1)
+    X = torch.stack([X, X, X], axis=1)
 
     # Normalize to [0, 255]
     _min, _max = X.amin(dim=(1, 2, 3), keepdims=True), X.amax(dim=(1, 2, 3), keepdims=True)

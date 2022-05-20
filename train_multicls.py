@@ -164,6 +164,9 @@ if __name__ == "__main__":
         help="apply class-count sensitive sampler",
         action="store_true",
     )
+    parser.add_argument("--in-chans", type=int, help="number of channels", default=3)
+    parser.add_argument("--mel", type=str, help="melspec. type", default="delta")
+    parser.add_argument("--per", type=int, default=30, help="clip length in seconds")
     parser.add_argument("--test-only", dest="test_only", help="Run inference", action="store_true")
     parser.add_argument("--device", type=str, help="Set device", default="cuda")
     args = parser.parse_args()
@@ -182,5 +185,8 @@ if __name__ == "__main__":
     CFG.loss_name = args.loss
     CFG.weighted_by_rating = args.wbr
     CFG.class_count_sensitive_sampler = args.ccs_sampler
+    CFG.in_chans = args.in_chans
+    CFG.melspec_type = args.mel
+    CFG.period = args.per
 
     main(args)
