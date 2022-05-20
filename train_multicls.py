@@ -27,6 +27,7 @@ def create_dataset(df, labels_df, mode, batch_size, nb_workers, shuffle):
         label_smoothing=CFG.label_smoothing,
         bg_blend_chance=CFG.bg_blend_chance,
         weighted_by_rating=CFG.weighted_by_rating,
+        sampling=CFG.sampling,
     )
     sampler = None
     if mode == "train" and CFG.class_count_sensitive_sampler:
@@ -85,6 +86,7 @@ def create_df():
     labels_df = labels_df.set_index("file_path")
     df["sample_weight"] = df.groupby("primary_label")["primary_label"].transform("count")
     df["sample_weight"] = 1 / np.log1p(df["sample_weight"])
+    assert len(labels_df) > 0, "Train soundscapes are empty"
     return df, labels_df
 
 
@@ -167,6 +169,7 @@ if __name__ == "__main__":
     parser.add_argument("--in-chans", type=int, help="number of channels", default=3)
     parser.add_argument("--mel", type=str, help="melspec. type", default="delta")
     parser.add_argument("--per", type=int, default=30, help="clip length in seconds")
+    parser.add_argument("--sampling", type=str, default="random", help="clip sampling method")
     parser.add_argument("--test-only", dest="test_only", help="Run inference", action="store_true")
     parser.add_argument("--device", type=str, help="Set device", default="cuda")
     args = parser.parse_args()
@@ -188,5 +191,6 @@ if __name__ == "__main__":
     CFG.in_chans = args.in_chans
     CFG.melspec_type = args.mel
     CFG.period = args.per
+    CFG.sampling = args.sampling
 
     main(args)
