@@ -5,39 +5,49 @@ import torch
 
 
 class CFG:
-    exp_name = "fixed_norm_first_channel_drop5_blend_chance80_alpha30-60_sampler"  # this goes to the save filename
+    exp_name = "multichannel_power_energy_pcen"  # this goes to the save filename
     output_dir = "../exp/multiclass/"
 
-    audios_path = "/media/nvme/Datasets/bird/2022/train_audio/*/*.ogg"
-    split_audios_path = "/media/nvme/Datasets/bird/2022/train_np/"
-    train_metadata = str(
-        Path(__file__).parent / "../../data/train_metadata.csv"
-    )  # making sure we use the same split
-    train_labels = "/media/nvme/Datasets/bird/2022/audio_images5/train_soundscapes.csv"
+    audios_path = "/mnt/datastore/birdclef_2022/input/train_audio/*/*.ogg" #  "/media/nvme/Datasets/bird/2022/train_audio/*/*.ogg"
+    split_audios_path = "/mnt/datastore/birdclef_2022/train_np/" #"/media/nvme/Datasets/bird/2022/train_np/"
+    train_metadata = "data/train_metadata.csv" 
+    # str(
+    #     Path(__file__).parent / "data/train_metadata.csv"
+    # )  # making sure we use the same split
+    train_labels = "/mnt/datastore/birdclef_2022/input/train_soundscapes.csv" # "/media/nvme/Datasets/bird/2022/audio_images5/train_soundscapes.csv"
 
     seed = 71
-    epochs = 23
-    cutmix_and_mixup_epochs = 18
+    epochs = 10
+    cutmix_and_mixup_epochs = 8
     fold = 0  # [0, 1, 2, 3, 4]
-    dropout = 0.5
+    dropout = 0.2
     N_FOLDS = 5
-    LR = 2 * 1e-3
+    LR = 1.5e-3
     ETA_MIN = 1e-6
 
+    wu = 372
+    mixup_perc = 0.5
+    spec_augmenter = 0
     WEIGHT_DECAY = 1e-6
     mixup_alpha = 0.4
     scored_weight = 1
-    label_smoothing = 0.0
+    label_smoothing = 0.05
     bg_blend_chance = 0.8
     bg_blend_alpha = (0.3, 0.6)
 
+    noise = 1
+    pink = 1
+    gauss = 1
+    oneofs = 0.2
+    vol = 0.2
+
     train_bs = 32  # 32
-    valid_bs = 32  # 64
-    base_model_name = "tf_efficientnet_b5_ns"
+    valid_bs = 64  # 64
+    base_model_name = "tf_efficientnet_b5_ns" # "tf_efficientnet_b5_ns" #tf_efficientnetv2_m_in21k   tf_efficientnet_b5_ns
     starting_weights = None  # "fold-0-b3-779.bin"
     load_up_to_layer = None  # 1
     apex = True
-    nb_workers = 6
+    nb_workers = 12
 
     mean = (
         torch.from_numpy(np.array([0.485, 0.456, 0.406])).float()[None, :, None, None].cuda()
@@ -91,3 +101,5 @@ class CFG:
     n_fft = 2048
     hop_length = 512
     sample_rate = 32000
+
+    multi_channel = True

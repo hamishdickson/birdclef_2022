@@ -9,22 +9,22 @@ class CFG:
     # List[Tuple[audio_root, csv_path]]
     train_data = [
         (
-            "/media/nvme/Datasets/bird/ext/birdvox/wav",
-            "/media/nvme/Datasets/bird/ext/birdvox/BirdVoxDCASE20k_csvpublic.csv",
+            "/mnt/datastore/birdclef_2022/ext/birdvox/wav",
+            "/mnt/datastore/birdclef_2022/ext/birdvox/BirdVoxDCASE20k_csvpublic.csv",
         ),
         (
-            "/media/nvme/Datasets/bird/ext/ff1010/raw/ff1010bird_wav/wav",
-            "/media/nvme/Datasets/bird/ext/ff1010/raw/ff1010bird_wav/ff1010bird_metadata_2018.csv",
+            "/mnt/datastore/birdclef_2022/ext/ff1010/raw/ff1010bird_wav/wav",
+            "/mnt/datastore/birdclef_2022/ext/ff1010/raw/ff1010bird_wav/ff1010bird_metadata_2018.csv",
         ),
-        (
-            "/media/nvme/Datasets/bird/ext/warblrb10k_public/wav",
-            "/media/nvme/Datasets/bird/ext/warblrb10k_public/warblrb10k_public_metadata_2018.csv",
-        ),
+        # (
+        #     "/mnt/datastore/birdclef_2022/ext/warblrb10k_public/wav",
+        #     "/mnt/datastore/birdclef_2022/ext/warblrb10k_public/warblrb10k_public_metadata_2018.csv",
+        # ),
     ]
 
     val_data = (
-        "/media/nvme/Datasets/bird/2021/train_soundscapes",
-        "/media/nvme/Datasets/bird/2021/train_soundscape_labels.csv",
+        "/mnt/datastore/birdclef_2022/ext/2021/train_soundscapes",
+        "data/train_soundscape_labels.csv",
     )
 
     seed = 71
@@ -59,3 +59,5 @@ class CFG:
     n_fft = 2048
     hop_length = 512
     sample_rate = 32000
+
+    multi_channel = False

@@ -111,6 +111,59 @@ def train_fold():
     return Trainer(CFG, device=device).train(train_dataloader, valid_dataloader)
 
 
+import optuna
+
+def tuner(trial):
+    from eval_multicls import eval_kfold
+    params = {
+        # "lr": trial.suggest_discrete_uniform("lr", 1e-3, 5e-3, 5e-4),
+        # "mixup_alpha": trial.suggest_discrete_uniform("mixup_alpha", 0.1, 0.5, 0.1),
+        # "wu": trial.suggest_discrete_uniform("wu", 0, 500, 25),
+        # "spec_augmenter": trial.suggest_discrete_uniform("spec_augmenter", 0.0, 0.5, 0.05),
+        # "mixup_perc": trial.suggest_discrete_uniform("mixup_perc", 0, 1, 0.1),
+        # "noise": trial.suggest_discrete_uniform("noise", 0, 1, 0.1),
+        # "gauss": trial.suggest_discrete_uniform("gauss", 0, 1, 0.1),
+        # "pink": trial.suggest_discrete_uniform("pink", 0, 1, 0.1),
+        "oneofs": trial.suggest_discrete_uniform("oneofs", 0, 0.5, 0.1),
+        "vol": trial.suggest_discrete_uniform("vol", 0, 0.5, 0.1),
+    }
+
+    print(params)
+
+    # CFG.LR = params['lr']
+    # CFG.mixup_alpha = params['mixup_alpha']
+    # CFG.wu = params['wu']
+    # CFG.spec_augmenter = params['spec_augmenter']
+
+    # CFG.mixup_perc = params['mixup_perc']
+    # CFG.noise = params['noise']
+    # CFG.gauss = params['gauss']
+    # CFG.pink = params['pink']
+    CFG.oneofs = params['oneofs']
+    CFG.vol = params['vol']
+
+    folds = range(5)
+    print(f"training folds {folds}")
+
+    model_paths = {}
+    for fold in folds:
+        CFG.fold = fold
+        model_paths[fold], fold_score = train_fold()
+
+    if len(folds) == 1:
+        score = fold_score
+    else:
+        score = eval_kfold(model_paths)
+        print(score)
+        score = score['masked_optimised_global_score']
+
+        # if fold_score < 0.9:
+        #     raise optuna.TrialPruned()
+    
+
+    return score
+
+
 if __name__ == "__main__":
     from argparse import ArgumentParser
 
@@ -121,8 +174,16 @@ if __name__ == "__main__":
     parser.add_argument("--nb_folds", type=int, default=5)
     args = parser.parse_args()
 
-    if args.multi_fold:
+    # study = optuna.create_study(direction="maximize")
+    # study.optimize(tuner, n_trials=100)
+
+    # print(study.best_value)
+    # print(study.best_params)
+
+
+    if True:
         folds = range(args.nb_folds)
+        print(f"training folds {folds}")
 
         model_paths = {}
         for fold in folds:
