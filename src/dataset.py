@@ -18,6 +18,7 @@ from utils.transforms import (
     cvt_audio_to_array,
     load_audio,
 )
+from configs.multicls import CFG
 
 
 class BinaryDataset(torch.utils.data.Dataset):
@@ -32,13 +33,13 @@ class BinaryDataset(torch.utils.data.Dataset):
                 [
                     OneOf(
                         [
-                            NoiseInjection(p=1, max_noise_level=0.04),
-                            GaussianNoise(p=1, min_snr=5, max_snr=20),
-                            PinkNoise(p=1, min_snr=5, max_snr=20),
+                            NoiseInjection(p=CFG.noise, max_noise_level=0.04),
+                            GaussianNoise(p=CFG.gauss, min_snr=5, max_snr=20),
+                            PinkNoise(p=CFG.pink, min_snr=5, max_snr=20),
                         ],
-                        p=0.2,
+                        p=CFG.oneofs,
                     ),
-                    RandomVolume(p=0.2, limit=4),
+                    RandomVolume(p=CFG.vol, limit=4),
                     Normalize(p=1),
                 ]
             )

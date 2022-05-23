@@ -35,6 +35,9 @@ def train_fn(model, data_loader, device, optimizer, scheduler, do_mixup=False, u
             loss = outputs["loss"]
 
         scaler.scale(loss).backward()
+
+        # scaler.unscale_(optimizer)
+        # torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         scaler.step(optimizer)
         scaler.update()
 
@@ -106,14 +109,30 @@ class Trainer:
             print(f"Loaded weights from {self.cfg.starting_weights}")
             print(loaded_keys)
 
+
+        param_optimizer = list(model.named_parameters())
+        no_decay = ["bias", "LayerNorm.bias"]
+        optimizer_parameters = [
+                {
+                    "params": [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)],
+                    "weight_decay": self.cfg.WEIGHT_DECAY,
+                },
+                {
+                    "params": [p for n, p in param_optimizer if any(nd in n for nd in no_decay)],
+                    "weight_decay": 0.0,
+                },
+            ]
+
         optimizer = torch.optim.AdamW(
-            model.parameters(), lr=self.cfg.LR, weight_decay=self.cfg.WEIGHT_DECAY
+            optimizer_parameters, lr=self.cfg.LR
         )
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer,
-            eta_min=self.cfg.ETA_MIN,
-            T_max=len(train_dataloader.dataset) / self.cfg.train_bs * 18,
+
+        scheduler = transformers.get_cosine_schedule_with_warmup(
+            optimizer=optimizer,
+            num_warmup_steps=self.cfg.wu,
+            num_training_steps=len(train_dataloader) * self.cfg.epochs,
         )
+    
 
         model = model.to(self.device)
 
@@ -138,6 +157,7 @@ class Trainer:
             valid_avg, valid_loss = valid_fn(model, valid_dataloader, self.device)
             valid_loss = valid_loss.avg
             valid_avg = valid_avg.avg
+            print(valid_avg)
 
             elapsed = time.time() - start_time
 
@@ -156,7 +176,7 @@ class Trainer:
 
             new_best = valid_avg.get("masked_f1_at_best", valid_avg["f1_at_best"])[1]
             writer.add_scalar("valid/best", new_best, epoch)
-            if new_best > best_score:
+            if True: #new_best > best_score:
                 self._output_dir.mkdir(exist_ok=True, parents=True)
                 new_save_path = (
                     self._output_dir

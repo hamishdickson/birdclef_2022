@@ -7,7 +7,7 @@ from torch.cuda.amp import autocast
 from torchaudio.transforms import AmplitudeToDB #, MelSpectrogram
 from torchlibrosa.augmentation import SpecAugmentation
 
-from nnAudio.Spectrogram import MelSpectrogram
+from nnAudio.Spectrogram import MelSpectrogram, CQT1992v2
 
 from layers import AttBlockV2, init_bn, init_layer
 from loss import loss_fn, mixup_criterion
@@ -69,7 +69,20 @@ class TimmSED(nn.Module):
         super().__init__()
         self.cfg = cfg
 
-        self.mel_trans = MelSpectrogram(
+        self.cqt = CQT1992v2(
+            sr=self.cfg.sample_rate,
+            # n_fft=self.cfg.n_fft,
+            hop_length=self.cfg.hop_length,
+            fmin=self.cfg.fmin,
+            fmax=self.cfg.fmax,
+            bins_per_octave=24,
+            # n_mels=self.cfg.n_mels,
+            # power=1.5,
+            trainable=True,
+            # trainable_STFT=True
+        )
+
+        self.mel_trans_power = MelSpectrogram(
             sr=self.cfg.sample_rate,
             n_fft=self.cfg.n_fft,
             hop_length=self.cfg.hop_length,
@@ -77,38 +90,26 @@ class TimmSED(nn.Module):
             fmax=self.cfg.fmax,
             n_mels=self.cfg.n_mels,
             power=2.0,
+            trainable_mel=True,
+            trainable_STFT=True
+        )
+
+        self.mel_trans = MelSpectrogram(
+            sr=self.cfg.sample_rate,
+            n_fft=self.cfg.n_fft,
+            hop_length=self.cfg.hop_length,
+            fmin=self.cfg.fmin,
+            fmax=self.cfg.fmax,
+            n_mels=self.cfg.n_mels,
+            # power=1.0,
             # trainable_mel=True,
             # trainable_STFT=True
         )
 
-        # self.mel_trans_power = MelSpectrogram(
-        #     sr=self.cfg.sample_rate,
-        #     n_fft=self.cfg.n_fft,
-        #     hop_length=self.cfg.hop_length,
-        #     fmin=self.cfg.fmin,
-        #     fmax=self.cfg.fmax,
-        #     n_mels=self.cfg.n_mels,
-        #     power=2.0,
-        #     trainable_mel=True,
-        #     trainable_STFT=True
-        # )
-
-        # self.mel_trans_energy = MelSpectrogram(
-        #     sr=self.cfg.sample_rate,
-        #     n_fft=self.cfg.n_fft,
-        #     hop_length=self.cfg.hop_length,
-        #     fmin=self.cfg.fmin,
-        #     fmax=self.cfg.fmax,
-        #     n_mels=self.cfg.n_mels,
-        #     power=1.0,
-        #     trainable_mel=True,
-        #     trainable_STFT=True
-        # )
-
 
         self.pcen_trans = PCENTransform(eps=1E-6, s=0.025, alpha=0.6, delta=0.1, r=0.2, trainable=True)
 
-        # self.amp_db_tran = AmplitudeToDB()
+        self.amp_db_tran = AmplitudeToDB()
 
         self.spec_augmenter = SpecAugmentation(
             time_drop_width=64 // 2, time_stripes_num=2, freq_drop_width=8 // 2, freq_stripes_num=2
@@ -134,7 +135,7 @@ class TimmSED(nn.Module):
         return self.amp_db_tran(self.mel_trans_power(y)).float()
 
     def compute_melspec_multi_channel(self, y):
-        return (self.pcen_trans(self.mel_trans(y)).float(), self.pcen_trans(self.mel_trans(y)).float(), self.pcen_trans(self.mel_trans(y)).float())
+        return (self.amp_db_tran(self.mel_trans_power(y)).float(), self.pcen_trans(self.mel_trans(y)).float(), self.cqt(y).float()[:,:self.cfg.n_mels,:])
 
     def init_weight(self):
         init_bn(self.bn0)
@@ -154,7 +155,7 @@ class TimmSED(nn.Module):
                 x = x / self.cfg.std
 
                 if self.training and do_mixup:
-                    if np.random.rand() < 0.5:
+                    if np.random.rand() < self.cfg.mixup_perc:
                         x, targets = mixup(x, targets, self.cfg.mixup_alpha, weights=weights)
                     else:
                         x, targets = cutmix(x, targets, self.cfg.mixup_alpha, weights=weights)
@@ -163,8 +164,8 @@ class TimmSED(nn.Module):
         x = self.bn0(x)
         x = x.transpose(1, 3)  # (batch_size, 3, time_steps, mel_bins)
 
-        if self.training:
-            if np.random.random() < 0.25:
+        if self.training and do_mixup:
+            if np.random.random() < self.cfg.spec_augmenter:
                 x = self.spec_augmenter(x)
 
         x = self.encoder(x)
@@ -176,11 +177,14 @@ class TimmSED(nn.Module):
         x2 = F.avg_pool1d(x, kernel_size=3, stride=1, padding=1)
         x = x1 + x2
 
-        x = F.dropout(x, p=self.cfg.dropout, training=self.training)
+        if do_mixup:
+            x = F.dropout(x, p=self.cfg.dropout, training=self.training)
         x = x.transpose(1, 2)
         x = F.relu_(self.fc1(x))
         x = x.transpose(1, 2)
-        x = F.dropout(x, p=self.cfg.dropout, training=self.training)
+    
+        if do_mixup:
+            x = F.dropout(x, p=self.cfg.dropout, training=self.training)
 
         clipwise_output, logit = self.att_block(x)
 
@@ -198,15 +202,3 @@ class TimmSED(nn.Module):
         output_dict["loss"] = loss
         return output_dict
 
-# tf_efficientnetv2_m_in21k
-
-
-        # x = self.framewise_pool(x)
-        # x = F.dropout(x, p=self.cfg.dropout, training=self.training)
-        # logit = self.framewise_cls(x)
-        # clipwise_output = logit.sigmoid()
-
-        # output_dict = {
-        #     "clipwise_output": clipwise_output.squeeze(-1),  # (n_samples, n_class)
-        #     "logit": logit.squeeze(-1),  # (n_samples, n_class)
-        # }

@@ -30,7 +30,10 @@ def eval_kfold(model_paths):
         model.load_state_dict(torch.load(path), strict=True)
 
         score, _ = valid_fn(model, valid_dataloader, score_meter=score, device=device)
-    print(score.avg)
+
+    s = score.avg
+    print(s)
+    return s
 
 
 if __name__ == "__main__":

@@ -17,14 +17,17 @@ class CFG:
     train_labels = "/mnt/datastore/birdclef_2022/input/train_soundscapes.csv" # "/media/nvme/Datasets/bird/2022/audio_images5/train_soundscapes.csv"
 
     seed = 71
-    epochs = 23
-    cutmix_and_mixup_epochs = 18
+    epochs = 10
+    cutmix_and_mixup_epochs = 8
     fold = 0  # [0, 1, 2, 3, 4]
-    dropout = 0.5
+    dropout = 0.2
     N_FOLDS = 5
-    LR = 2 * 1e-3
+    LR = 1.5e-3
     ETA_MIN = 1e-6
 
+    wu = 372
+    mixup_perc = 0.5
+    spec_augmenter = 0
     WEIGHT_DECAY = 1e-6
     mixup_alpha = 0.4
     scored_weight = 1
@@ -32,9 +35,15 @@ class CFG:
     bg_blend_chance = 0.8
     bg_blend_alpha = (0.3, 0.6)
 
+    noise = 1
+    pink = 1
+    gauss = 1
+    oneofs = 0.2
+    vol = 0.2
+
     train_bs = 32  # 32
-    valid_bs = 32  # 64
-    base_model_name = "tf_efficientnet_b3_ns" #tf_efficientnetv2_m_in21k   tf_efficientnet_b5_ns
+    valid_bs = 64  # 64
+    base_model_name = "tf_efficientnet_b5_ns" # "tf_efficientnet_b5_ns" #tf_efficientnetv2_m_in21k   tf_efficientnet_b5_ns
     starting_weights = None  # "fold-0-b3-779.bin"
     load_up_to_layer = None  # 1
     apex = True
