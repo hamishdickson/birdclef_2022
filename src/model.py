@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchaudio.functional as AF
 from nnAudio import Spectrogram
+from nnAudio.features import CQT1992v2
 from torch.cuda.amp import autocast
 from torchaudio.transforms import AmplitudeToDB, MelSpectrogram
 from torchlibrosa.augmentation import SpecAugmentation
@@ -187,6 +188,7 @@ class TimmSED(nn.Module):
                 power=2.0,
                 trainable_mel=True,
                 trainable_STFT=True,
+                verbose=False,
             )
             self.mel_trans_energy = Spectrogram.MelSpectrogram(
                 sr=self.cfg.sample_rate,
@@ -198,6 +200,39 @@ class TimmSED(nn.Module):
                 power=1.0,
                 trainable_mel=True,
                 trainable_STFT=True,
+                verbose=False,
+            )
+        elif mel_type == "powercqt":
+            self.cqt = CQT1992v2(
+                sr=self.cfg.sample_rate,
+                hop_length=self.cfg.hop_length,
+                fmin=self.cfg.fmin,
+                fmax=self.cfg.fmax,
+                bins_per_octave=24,
+                verbose=False,
+                trainable=True,
+            )
+            self.mel_trans_power = MelSpectrogram(
+                sr=self.cfg.sample_rate,
+                n_fft=self.cfg.n_fft,
+                hop_length=self.cfg.hop_length,
+                fmin=self.cfg.fmin,
+                fmax=self.cfg.fmax,
+                n_mels=self.cfg.n_mels,
+                power=2.0,
+                trainable_mel=True,
+                trainable_STFT=True,
+            )
+            self.mel_trans = MelSpectrogram(
+                sr=self.cfg.sample_rate,
+                n_fft=self.cfg.n_fft,
+                hop_length=self.cfg.hop_length,
+                fmin=self.cfg.fmin,
+                fmax=self.cfg.fmax,
+                n_mels=self.cfg.n_mels,
+            )
+            self.pcen_trans = PCENTransform(
+                eps=1e-6, s=0.025, alpha=0.6, delta=0.1, r=0.2, trainable=True
             )
         else:
             self.mel_trans = MelSpectrogram(
@@ -246,9 +281,22 @@ class TimmSED(nn.Module):
             1,
         )
 
+    def compute_melspec_cqt(self, y):
+        return torch.stack(
+            (
+                self.amp_db_tran(self.mel_trans_power(y)).float(),
+                self.pcen_trans(self.mel_trans(y)).float(),
+                self.cqt(y).float()[:, : self.cfg.n_mels, :],
+            ),
+            1,
+        )
+
     def preprocess_audio(self, waveform: torch.Tensor, type="color"):
-        if type == "power":
-            x = self.compute_melspec_multi_channel(waveform)
+        if "power" in type:
+            if type == "power":
+                x = self.compute_melspec_multi_channel(waveform)
+            elif type == "powercqt":
+                x = self.compute_melspec_cqt(waveform)
             _min, _max = x.amin(dim=(1, 2, 3), keepdim=True), x.amax(dim=(1, 2, 3), keepdim=True)
             x = (x - _min) / (_max - _min)
             x = (x - self.mean) / self.std
@@ -314,17 +362,11 @@ class TimmSED(nn.Module):
         x = F.dropout(x, p=self.cfg.dropout, training=self.training)
 
         # Extract segmentwise and framewise
-        clipwise_output, logit, segmentwise_logit = self.att_block(x)
-        segmentwise_logit = segmentwise_logit.transpose(1, 2)
-        interpolate_ratio = frames_num // segmentwise_logit.size(1)
-        framewise_logit = interpolate(segmentwise_logit, interpolate_ratio)
-        framewise_output = torch.sigmoid(framewise_logit)
-        framewise_output = pad_framewise_output(framewise_output, frames_num)
-
+        clipwise_logit, _ = self.att_block(x)
+        clipwise_output = torch.sigmoid(clipwise_logit)
         output_dict = {
             "clipwise_output": clipwise_output,  # (n_samples, n_class)
-            "framewise_output": framewise_output,
-            "logit": logit,  # (n_samples, n_class)
+            "logit": clipwise_logit,
         }
 
         if self.training:
@@ -343,3 +385,68 @@ class TimmSED(nn.Module):
                 loss = None
         output_dict["loss"] = loss
         return output_dict
+
+
+def pcen(x, eps=1e-6, s=0.025, alpha=0.98, delta=2, r=0.5, training=False):
+    frames = x.split(1, -2)
+    m_frames = []
+    last_state = None
+    for frame in frames:
+        if last_state is None:
+            last_state = s * frame
+            m_frames.append(last_state)
+            continue
+        if training:
+            m_frame = ((1 - s) * last_state).add_(s * frame)
+        else:
+            m_frame = (1 - s) * last_state + s * frame
+        last_state = m_frame
+        m_frames.append(m_frame)
+    M = torch.cat(m_frames, 1)
+    if training:
+        pcen_ = (x / (M + eps).pow(alpha) + delta).pow(r) - delta**r
+    else:
+        pcen_ = x.div_(M.add_(eps).pow_(alpha)).add_(delta).pow_(r).sub_(delta**r)
+    return pcen_
+
+
+class PCENTransform(nn.Module):
+    def __init__(self, eps=1e-6, s=0.025, alpha=0.98, delta=2, r=0.5, trainable=True):
+        super().__init__()
+        if trainable:
+            self.log_s = nn.Parameter(torch.log(torch.Tensor([s])))
+            self.log_alpha = nn.Parameter(torch.log(torch.Tensor([alpha])))
+            self.log_delta = nn.Parameter(torch.log(torch.Tensor([delta])))
+            self.log_r = nn.Parameter(torch.log(torch.Tensor([r])))
+        else:
+            self.s = s
+            self.alpha = alpha
+            self.delta = delta
+            self.r = r
+        self.eps = eps
+        self.trainable = trainable
+
+    def forward(self, x):
+        x = x.transpose(2, 1)
+        if self.trainable:
+            x = pcen(
+                x,
+                self.eps,
+                torch.exp(self.log_s),
+                torch.exp(self.log_alpha),
+                torch.exp(self.log_delta),
+                torch.exp(self.log_r),
+                self.training and self.trainable,
+            )
+        else:
+            x = pcen(
+                x,
+                self.eps,
+                self.s,
+                self.alpha,
+                self.delta,
+                self.r,
+                self.training and self.trainable,
+            )
+        x = x.transpose(2, 1)
+        return x
